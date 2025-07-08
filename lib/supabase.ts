@@ -1,4 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
+import * as FileSystem from 'expo-file-system';
+import { decode } from 'base64-arraybuffer';
+import { Platform } from 'react-native';
+// Official reference: https://supabase.com/blog/react-native-storage
+// Docs: https://supabase.com/docs/guides/storage/uploads/standard-uploads
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
@@ -30,21 +35,29 @@ export const uploadDocument = async (
   try {
     console.log('Starting upload process...', { patientId, category, fileName: file.name });
 
-    // Convert file to blob for upload
-    const response = await fetch(file.uri);
-    const blob = await response.blob();
-    
+    let fileData: ArrayBuffer;
+    if (file.uri.startsWith('file://') || Platform.OS !== 'web') {
+      // React Native/Expo: Read as base64, decode to ArrayBuffer
+      // Reference: https://supabase.com/blog/react-native-storage
+      const base64 = await FileSystem.readAsStringAsync(file.uri, { encoding: FileSystem.EncodingType.Base64 });
+      fileData = decode(base64);
+    } else {
+      // Web: fetch as Blob, then convert to ArrayBuffer
+      const response = await fetch(file.uri);
+      fileData = await response.arrayBuffer();
+    }
+
     // Generate unique filename
     const fileExt = file.name.split('.').pop() || 'jpg';
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
     const filePath = `medical-records/${patientId}/${fileName}`;
 
-    console.log('Uploading file to storage...', { filePath, fileSize: blob.size });
+    console.log('Uploading file to storage...', { filePath, fileSize: fileData.byteLength });
 
     // Upload file to Supabase Storage
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('medical-documents')
-      .upload(filePath, blob, {
+      .upload(filePath, fileData, {
         contentType: file.type,
         upsert: false
       });
