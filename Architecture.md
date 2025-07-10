@@ -96,3 +96,7 @@ sequenceDiagram
 ---
 
 *This document is a living architecture and requirements reference. Update with new diagrams and flows as the system evolves.* 
+
+rm -rf .expo && rm -rf node_modules/.cache && npx expo install --fix
+npx expo start --clear --web
+npm install @supabase/supabase-js react-native-url-polyfill
