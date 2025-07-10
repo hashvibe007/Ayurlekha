@@ -17,6 +17,7 @@ interface RecordCardProps {
   tags: string[];
   imageUrl: string;
   icon: React.ReactNode;
+  onPress?: () => void;
 }
 
 const { width } = Dimensions.get('window');
@@ -44,12 +45,13 @@ export function RecordCard({
   patientName, 
   tags, 
   imageUrl,
-  icon
+  icon,
+  onPress
 }: RecordCardProps) {
   const categoryColor = getCategoryColor(category);
 
   return (
-    <TouchableOpacity style={styles.cardContainer}>
+    <TouchableOpacity style={styles.cardContainer} onPress={onPress}>
       <View style={styles.imageContainer}>
         <Image
           source={{ uri: imageUrl }}

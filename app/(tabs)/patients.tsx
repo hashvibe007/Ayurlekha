@@ -14,17 +14,28 @@ import { UserPlus, Search, Heart, CircleAlert as AlertCircle, Pill as Pills, The
 import { usePatientStore } from '@/stores/patientStore';
 import { PatientCard } from '@/components/PatientCard';
 import { AddPatientModal } from '@/components/AddPatientModal';
+import { updatePatient, deletePatient } from '@/lib/supabase';
 
 const { width } = Dimensions.get('window');
 
 export default function PatientsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalVisible, setIsModalVisible] = useState(false);
-  const { patients, addPatient } = usePatientStore();
+  const [editPatient, setEditPatient] = useState(null);
+  const { patients, addPatient, removePatient } = usePatientStore();
 
   const handleAddPatient = (patient: any) => {
     addPatient(patient);
     setIsModalVisible(false);
+  };
+
+  const handleEditPatient = (patient: any) => {
+    setEditPatient(patient);
+    setIsModalVisible(true);
+  };
+  const handleDeletePatient = async (patient: any) => {
+    await deletePatient(patient.id);
+    removePatient(patient.id);
   };
 
   const filteredPatients = searchQuery.trim() === '' 
@@ -101,6 +112,8 @@ export default function PatientsScreen() {
               gender={item.gender}
               ailments={item.ailments}
               getConditionIcon={getConditionIcon}
+              onEdit={() => handleEditPatient(item)}
+              onDelete={() => handleDeletePatient(item)}
             />
           )}
           keyExtractor={(item, index) => index.toString()}
@@ -131,8 +144,10 @@ export default function PatientsScreen() {
 
       <AddPatientModal 
         visible={isModalVisible}
-        onClose={() => setIsModalVisible(false)}
-        onAddPatient={handleAddPatient}
+        onClose={() => { setIsModalVisible(false); setEditPatient(null); }}
+        onAddPatient={addPatient}
+        editMode={!!editPatient}
+        patient={editPatient}
       />
     </SafeAreaView>
   );

@@ -9,11 +9,12 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  Animated
+  Animated,
+  ActivityIndicator
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { X, Plus, Minus } from 'lucide-react-native';
-import { createPatient } from '@/lib/supabase';
+import { createPatient, updatePatient } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 
 interface AddPatientModalProps {
@@ -22,7 +23,7 @@ interface AddPatientModalProps {
   onAddPatient: (patient: any) => void;
 }
 
-export function AddPatientModal({ visible, onClose, onAddPatient }: AddPatientModalProps) {
+export function AddPatientModal({ visible, onClose, onAddPatient, editMode = false, patient = null }: AddPatientModalProps & { editMode?: boolean, patient?: any }) {
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
   const [gender, setGender] = useState('');
@@ -44,19 +45,26 @@ export function AddPatientModal({ visible, onClose, onAddPatient }: AddPatientMo
         toValue: 1,
         friction: 8,
         tension: 40,
-        useNativeDriver: true,
+        useNativeDriver: false, // Fix: must be false for modal animation in Hermes
       }).start();
     } else {
       Animated.timing(animation, {
         toValue: 0,
         duration: 200,
-        useNativeDriver: true,
+        useNativeDriver: false, // Fix: must be false for modal animation in Hermes
       }).start();
-      
-      // Reset form on close
-      resetForm();
+      // Reset state when modal closes
+      setName('');
+      setAge('');
+      setGender('');
+      setHeight('');
+      setAilment('');
+      setAilments([]);
+      setMedication('');
+      setMedications([]);
+      setError('');
     }
-  }, [visible]);
+  }, [visible, animation]);
 
   const resetForm = () => {
     setName('');
@@ -96,27 +104,59 @@ export function AddPatientModal({ visible, onClose, onAddPatient }: AddPatientMo
   };
 
   const handleSubmit = async () => {
-    if (name.trim() === '') {
-      setError('Name is required');
-      return;
-    }
-    if (!user?.id) {
-      setError('User not authenticated');
-      return;
-    }
-    setIsLoading(true);
-    setError('');
     try {
-      const patient = await createPatient(
-        name.trim(),
-        null, // dob (add field if needed)
-        gender || 'Not specified',
-        user.id
-      );
-      onAddPatient(patient);
+      if (name.trim() === '') {
+        setError('Name is required');
+        return;
+      }
+      if (!user?.id) {
+        setError('User not authenticated');
+        return;
+      }
+      setIsLoading(true);
+      setError('');
+      // Type guards
+      const safeAge = age && !isNaN(Number(age)) ? Number(age) : null;
+      const safeHeight = height && height.trim() !== '' ? height : null;
+      const safeAilments = Array.isArray(ailments) ? ailments : [];
+      const safeMedications = Array.isArray(medications) ? medications : [];
+      console.log('Submitting patient:', { name, safeAge, gender, safeHeight, safeAilments, safeMedications });
+      let result;
+      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Request timed out')), 10000));
+      if (editMode && patient) {
+        result = await Promise.race([
+          updatePatient(patient.id, {
+            name: name.trim(),
+            age: safeAge,
+            gender: gender || 'Not specified',
+            height: safeHeight,
+            ailments: safeAilments,
+            medications: safeMedications
+          }),
+          timeout
+        ]);
+      } else {
+        result = await Promise.race([
+          createPatient(
+            name.trim(),
+            null, // dob
+            gender || 'Not specified',
+            user.id,
+            safeAge,
+            safeHeight,
+            safeAilments,
+            safeMedications
+          ),
+          timeout
+        ]);
+      }
+      console.log('Patient saved:', result);
+      onAddPatient(result);
       onClose();
     } catch (e: any) {
-      setError(e.message || 'Failed to add patient');
+      console.error('Add/Edit patient error:', e);
+      setError(e?.message || 'Failed to save patient (unknown error)');
+      setTimeout(() => { setIsLoading(false); }, 1000);
     } finally {
       setIsLoading(false);
     }
@@ -171,7 +211,7 @@ export function AddPatientModal({ visible, onClose, onAddPatient }: AddPatientMo
           ]}
         >
           <View style={styles.header}>
-            <Text style={styles.title}>Add Patient</Text>
+            <Text style={styles.title}>{editMode ? 'Edit Patient' : 'Add Patient'}</Text>
             <TouchableOpacity style={styles.closeButton} onPress={onClose}>
               <X size={24} color="#757575" />
             </TouchableOpacity>
@@ -324,9 +364,18 @@ export function AddPatientModal({ visible, onClose, onAddPatient }: AddPatientMo
               style={styles.saveButton}
               onPress={handleSubmit}
             >
-              <Text style={styles.saveButtonText}>Save Patient</Text>
+              <Text style={styles.saveButtonText}>{editMode ? 'Update Patient' : 'Save Patient'}</Text>
             </TouchableOpacity>
           </View>
+          {isLoading && (
+            <View style={{ alignItems: 'center', marginVertical: 16 }}>
+              <ActivityIndicator size="large" color="#4A90E2" />
+              <Text style={{ color: '#4A90E2', marginTop: 8 }}>Saving...</Text>
+            </View>
+          )}
+          {error ? (
+            <Text style={{ color: 'red', marginVertical: 8, textAlign: 'center' }}>{error}</Text>
+          ) : null}
         </Animated.View>
       </KeyboardAvoidingView>
     </Modal>

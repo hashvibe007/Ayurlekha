@@ -8,7 +8,9 @@ import {
   ScrollView,
   TouchableOpacity,
   Dimensions,
-  RefreshControl
+  RefreshControl,
+  Modal,
+  Image
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,6 +18,9 @@ import { Search, Filter, FileText, BriefcaseMedical as FileMedical, FileImage } 
 import { RecordCard } from '@/components/RecordCard';
 import { CategoryTabs } from '@/components/CategoryTabs';
 import { useRecordStore } from '@/stores/recordStore';
+import { usePatientStore } from '@/stores/patientStore';
+import { Picker } from '@react-native-picker/picker';
+import { WebView } from 'react-native-webview';
 
 const { width } = Dimensions.get('window');
 
@@ -34,13 +39,16 @@ export default function RecordsScreen() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [filteredRecords, setFilteredRecords] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState<any>(null);
   
   const { records, isLoading, fetchRecords } = useRecordStore();
+  const { patients } = usePatientStore();
+  const [selectedPatient, setSelectedPatient] = useState<string>('all');
 
   useEffect(() => {
-    // Fetch records on component mount
-    fetchRecords();
-  }, []);
+    fetchRecords(selectedPatient !== 'all' ? selectedPatient : undefined);
+  }, [selectedPatient]);
 
   useEffect(() => {
     // Filter records based on search and category
@@ -78,6 +86,11 @@ export default function RecordsScreen() {
     setRefreshing(true);
     await fetchRecords();
     setRefreshing(false);
+  };
+
+  const handleRecordPress = (record: any) => {
+    setSelectedRecord(record);
+    setViewerVisible(true);
   };
 
   const getIconForFileType = (fileType: string) => {
@@ -131,6 +144,20 @@ export default function RecordsScreen() {
           selectedCategory={selectedCategory}
           onSelectCategory={handleCategorySelect}
         />
+
+        <View style={styles.filterRow}>
+          <Text style={styles.filterLabel}>Patient:</Text>
+          <Picker
+            selectedValue={selectedPatient}
+            onValueChange={setSelectedPatient}
+            style={styles.picker}
+          >
+            <Picker.Item label="All" value="all" />
+            {patients.map((p) => (
+              <Picker.Item key={p.id} label={p.name} value={p.id} />
+            ))}
+          </Picker>
+        </View>
       </View>
 
       <FlatList
@@ -140,10 +167,11 @@ export default function RecordsScreen() {
             title={item.title}
             date={new Date(item.created_at).toLocaleDateString()}
             category={item.category}
-            patientName="Patient"
+            patientName={patients.find(p => p.id === item.patient_id)?.name || 'Unknown'}
             tags={item.tags}
             imageUrl={item.file_url}
             icon={getIconForFileType(item.file_type)}
+            onPress={() => handleRecordPress(item)}
           />
         )}
         keyExtractor={item => item.id}
@@ -159,6 +187,21 @@ export default function RecordsScreen() {
           />
         }
       />
+      {/* Document Viewer Modal */}
+      <Modal visible={viewerVisible} animationType="slide" onRequestClose={() => setViewerVisible(false)}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }}>
+          <TouchableOpacity style={{ padding: 16, alignSelf: 'flex-end' }} onPress={() => setViewerVisible(false)}>
+            <Text style={{ color: '#fff', fontSize: 18 }}>Close</Text>
+          </TouchableOpacity>
+          {selectedRecord && selectedRecord.file_type.includes('image') ? (
+            <Image source={{ uri: selectedRecord.file_url }} style={{ flex: 1, resizeMode: 'contain' }} />
+          ) : selectedRecord && selectedRecord.file_type.includes('pdf') ? (
+            <WebView source={{ uri: selectedRecord.file_url }} style={{ flex: 1 }} />
+          ) : (
+            <Text style={{ color: '#fff', textAlign: 'center', marginTop: 40 }}>Cannot preview this file type.</Text>
+          )}
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -205,6 +248,33 @@ const styles = StyleSheet.create({
   },
   filterButton: {
     padding: 5,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 3,
+    height: 50,
+  },
+  filterLabel: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 16,
+    color: '#333333',
+    marginRight: 10,
+  },
+  picker: {
+    flex: 1,
+    fontFamily: 'Inter-Regular',
+    fontSize: 16,
+    color: '#333333',
+    height: '100%',
   },
   recordsList: {
     paddingHorizontal: 20,

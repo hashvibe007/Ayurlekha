@@ -2,13 +2,16 @@ import { createClient } from '@supabase/supabase-js';
 import * as FileSystem from 'expo-file-system';
 import { decode } from 'base64-arraybuffer';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 // Official reference: https://supabase.com/blog/react-native-storage
 // Docs: https://supabase.com/docs/guides/storage/uploads/standard-uploads
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: { storage: AsyncStorage }
+});
 
 export interface MedicalRecord {
   id: string;
@@ -56,10 +59,16 @@ export const uploadDocument = async (
       fileData = await response.arrayBuffer();
     }
 
+    // Get current user id
+    const session = await supabase.auth.getSession();
+    const userId = session.data.session?.user.id;
+    if (!userId) throw new Error('User not authenticated');
+
     // Generate unique filename
     const fileExt = file.name.split('.').pop() || 'jpg';
     const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-    const filePath = `medical-records/${patientId}/${fileName}`;
+    // Store under user_id/patient_id
+    const filePath = `${userId}/${patientId}/${fileName}`;
 
     console.log('Uploading file to storage...', { filePath, fileSize: fileData.byteLength });
 
@@ -84,11 +93,6 @@ export const uploadDocument = async (
       .getPublicUrl(filePath);
 
     console.log('Generated public URL:', publicUrl);
-
-    // Get current user id
-    const session = await supabase.auth.getSession();
-    const userId = session.data.session?.user.id;
-    if (!userId) throw new Error('User not authenticated');
 
     // Prepare record data
     const recordData = {
@@ -185,14 +189,47 @@ export const deleteDocument = async (recordId: string, filePath: string) => {
   }
 };
 
-export const createPatient = async (name: string, dob: string | null, gender: string, userId: string) => {
+export const createPatient = async (name: string, dob: string | null, gender: string, userId: string, age?: number, height?: string, ailments?: string[], medications?: string[]) => {
   const { data, error } = await supabase
     .from('patients')
-    .insert({ name, dob, gender, user_id: userId })
+    .insert({ name, dob, gender, user_id: userId, age, height, ailments, medications })
     .select()
     .single();
   if (error) throw error;
   return data;
+};
+
+export const updatePatient = async (id: string, updates: any) => {
+  const { data, error } = await supabase
+    .from('patients')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+};
+
+export const deletePatient = async (id: string) => {
+  const { error } = await supabase
+    .from('patients')
+    .delete()
+    .eq('id', id);
+  if (error) throw error;
+  return true;
+};
+
+export const deleteUser = async (userId: string) => {
+  // Delete user from auth.users (requires service role key in backend, so here just a placeholder)
+  // Delete all patients and records for this user
+  const { error: patientError } = await supabase
+    .from('patients')
+    .delete()
+    .eq('user_id', userId);
+  if (patientError) throw patientError;
+  // Optionally, sign out user
+  await supabase.auth.signOut();
+  return true;
 };
 
 // Test connection function
@@ -214,4 +251,22 @@ export const testSupabaseConnection = async () => {
     console.error('Supabase connection test error:', error);
     return false;
   }
+};
+
+// Upload Ayurlekha summary markdown
+export const uploadAyurlekhaSummary = async (
+  userId: string,
+  patientId: string,
+  content: string
+) => {
+  const filePath = `Ayurlekha/${userId}/${patientId}/Ayurlekha.md`;
+  const fileData = new TextEncoder().encode(content);
+  const { data, error } = await supabase.storage
+    .from('medical-documents')
+    .upload(filePath, fileData, {
+      contentType: 'text/markdown',
+      upsert: true
+    });
+  if (error) throw error;
+  return data;
 };

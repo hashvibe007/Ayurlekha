@@ -82,22 +82,23 @@ export function DocumentUploader({
 
   const handleGalleryUpload = async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ['image/*', 'application/pdf'],
-        copyToCacheDirectory: true,
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.8,
       });
 
-      if (!result.canceled && result.assets[0]) {
+      if (!result.canceled && result.assets && result.assets[0]) {
         const asset = result.assets[0];
         await handleFileUpload({
           uri: asset.uri,
-          name: asset.name,
-          type: asset.mimeType || 'application/octet-stream'
+          name: asset.fileName || `${selectedDocumentType}_gallery_${Date.now()}.jpg`,
+          type: asset.type || 'image/jpeg',
         });
       }
     } catch (error) {
       console.error('Gallery upload error:', error);
-      onUploadError('Failed to upload document. Please try again.');
+      onUploadError('Failed to upload image. Please try again.');
     }
   };
 
@@ -281,7 +282,7 @@ export function DocumentUploader({
           <View style={styles.optionTextContainer}>
             <Text style={styles.optionTitle}>Upload from Gallery</Text>
             <Text style={styles.optionDescription}>
-              Select an image or PDF from your device
+              Select an image from your photo gallery
             </Text>
           </View>
         </TouchableOpacity>

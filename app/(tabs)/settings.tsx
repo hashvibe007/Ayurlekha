@@ -11,8 +11,11 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CircleUser as UserCircle, Bell, Shield, CloudUpload, Smartphone, CircleHelp as HelpCircle, LogOut, ChevronRight } from 'lucide-react-native';
+import { useAuth } from '@/contexts/AuthContext';
+import { deleteUser } from '@/lib/supabase';
 
 export default function SettingsScreen() {
+  const { user, signOut } = useAuth();
   const [notificationsEnabled, setNotificationsEnabled] = React.useState(true);
   const [biometricEnabled, setBiometricEnabled] = React.useState(false);
   const [darkModeEnabled, setDarkModeEnabled] = React.useState(false);
@@ -20,6 +23,19 @@ export default function SettingsScreen() {
 
   const toggleSwitch = (setter: React.Dispatch<React.SetStateAction<boolean>>) => (value: boolean) => {
     setter(value);
+  };
+
+  const handleDeleteUser = async () => {
+    if (!user?.id) return;
+    // Confirm delete
+    if (!window.confirm('Are you sure you want to delete your account? This cannot be undone.')) return;
+    try {
+      await deleteUser(user.id);
+      alert('Account deleted.');
+      signOut();
+    } catch (e) {
+      alert('Failed to delete account.');
+    }
   };
 
   return (
@@ -135,9 +151,12 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
         
-        <TouchableOpacity style={styles.logoutButton}>
+        <TouchableOpacity style={styles.logoutButton} onPress={signOut}>
           <LogOut color="#E53935" size={20} style={{ marginRight: 8 }} />
           <Text style={styles.logoutText}>Log Out</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteUser}>
+          <Text style={styles.deleteText}>Delete Account</Text>
         </TouchableOpacity>
         
         <Text style={styles.versionText}>Ayurlekha v1.0.0</Text>
@@ -225,6 +244,26 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   logoutText: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 16,
+    color: '#E53935',
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 10,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  deleteText: {
     fontFamily: 'Inter-SemiBold',
     fontSize: 16,
     color: '#E53935',
