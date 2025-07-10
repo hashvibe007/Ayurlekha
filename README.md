@@ -108,3 +108,36 @@ const byteArray = new Uint8Array(byteNumbers);
 const blob = new Blob([byteArray], { type: file.type });
 ```
 Then upload this blob to Supabase.
+
+```mermaid
+erDiagram
+    users {
+      uuid id PK
+      text email
+    }
+    patients {
+      uuid id PK
+      uuid user_id FK
+      text name
+      date dob
+      text gender
+      timestamp created_at
+      timestamp updated_at
+    }
+    medical_records {
+      uuid id PK
+      uuid user_id FK
+      uuid patient_id FK
+      text title
+      text file_url
+      text file_type
+      text category
+      text[] tags
+      timestamp created_at
+      timestamp updated_at
+    }
+
+    users ||--o{ patients : has
+    patients ||--o{ medical_records : has
+    users ||--o{ medical_records : owns
+```
