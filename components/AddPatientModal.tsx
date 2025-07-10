@@ -13,6 +13,8 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { X, Plus, Minus } from 'lucide-react-native';
+import { createPatient } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface AddPatientModalProps {
   visible: boolean;
@@ -30,6 +32,9 @@ export function AddPatientModal({ visible, onClose, onAddPatient }: AddPatientMo
   const [medication, setMedication] = useState('');
   const [medications, setMedications] = useState<string[]>([]);
   const [animation] = useState(new Animated.Value(0));
+  const { user } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const genderOptions = ['Male', 'Female', 'Other'];
   
@@ -90,23 +95,31 @@ export function AddPatientModal({ visible, onClose, onAddPatient }: AddPatientMo
     setMedications(newMedications);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (name.trim() === '') {
-      // Validation error handling would go here
+      setError('Name is required');
       return;
     }
-
-    const patient = {
-      id: Date.now().toString(),
-      name: name.trim(),
-      age: parseInt(age) || 0,
-      gender: gender || 'Not specified',
-      height: height ? `${height} cm` : 'Not specified',
-      ailments: ailments,
-      medications: medications,
-    };
-
-    onAddPatient(patient);
+    if (!user?.id) {
+      setError('User not authenticated');
+      return;
+    }
+    setIsLoading(true);
+    setError('');
+    try {
+      const patient = await createPatient(
+        name.trim(),
+        null, // dob (add field if needed)
+        gender || 'Not specified',
+        user.id
+      );
+      onAddPatient(patient);
+      onClose();
+    } catch (e: any) {
+      setError(e.message || 'Failed to add patient');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const translateY = animation.interpolate({

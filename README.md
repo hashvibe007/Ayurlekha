@@ -78,11 +78,26 @@ cp .env.example .env
 npm run dev
 ```
 
+## Patient Creation & Data Integrity
+- All patients are created via Supabase (never client-generated IDs).
+- Patient IDs and all record IDs are UUIDs (universally unique identifiers).
+- If you see an error about invalid UUID, clear your local patient/record store and re-add patients via the app.
+- Use the new `clearPatients` and `clearRecords` methods in the store for a clean slate during testing.
+
+## Upload Flow (User-Patient-Document)
+1. User logs in via email OTP (Supabase Auth).
+2. User adds a patient (Supabase generates UUID, associates with user).
+3. User uploads a document for a patient:
+   - File is uploaded to Supabase Storage under `/user_id/patient_id/filename`.
+   - Metadata is saved to `medical_records` with correct user_id and patient_id (both UUIDs).
+4. User can view/download documents for their patients only.
+
 ## Troubleshooting
-- **File upload corrupted?**  
-  ⇒ Uses expo-file-system to read and convert to Blob before upload.
-- **Supabase connection issues?**  
-  ⇒ Check .env and network connectivity.
+- **Invalid patientId or userId (UUID) error?**
+  - Clear your local patient and record store (see above).
+  - Re-add patients via the app (do not use old data or manually created IDs).
+- **Upload fails after adding a patient?**
+  - Ensure patient was created via the app and not with a client-generated ID.
 
 ## Current Issue & Fix
 **Problem:** Files uploaded from mobile are corrupted (cannot be opened).

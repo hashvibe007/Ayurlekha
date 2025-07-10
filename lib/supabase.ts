@@ -22,6 +22,10 @@ export interface MedicalRecord {
   updated_at: string;
 }
 
+function isValidUUID(uuid: string) {
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(uuid);
+}
+
 export const uploadDocument = async (
   file: {
     uri: string;
@@ -34,6 +38,11 @@ export const uploadDocument = async (
 ) => {
   try {
     console.log('Starting upload process...', { patientId, category, fileName: file.name });
+
+    // Validate patientId
+    if (!isValidUUID(patientId)) {
+      throw new Error('Invalid patientId: must be a UUID. Please re-add the patient.');
+    }
 
     let fileData: ArrayBuffer;
     if (file.uri.startsWith('file://') || Platform.OS !== 'web') {
@@ -76,6 +85,11 @@ export const uploadDocument = async (
 
     console.log('Generated public URL:', publicUrl);
 
+    // Get current user id
+    const session = await supabase.auth.getSession();
+    const userId = session.data.session?.user.id;
+    if (!userId) throw new Error('User not authenticated');
+
     // Prepare record data
     const recordData = {
       title: file.name.replace(/\.[^/.]+$/, ""), // Remove file extension
@@ -83,6 +97,7 @@ export const uploadDocument = async (
       file_type: file.type,
       category: category,
       patient_id: patientId,
+      user_id: userId,
       tags: tags
     };
 
@@ -168,6 +183,16 @@ export const deleteDocument = async (recordId: string, filePath: string) => {
     console.error('Error deleting document:', error);
     throw error;
   }
+};
+
+export const createPatient = async (name: string, dob: string | null, gender: string, userId: string) => {
+  const { data, error } = await supabase
+    .from('patients')
+    .insert({ name, dob, gender, user_id: userId })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
 };
 
 // Test connection function

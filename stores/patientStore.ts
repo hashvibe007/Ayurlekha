@@ -17,6 +17,7 @@ interface PatientState {
   addPatient: (patient: Patient) => void;
   updatePatient: (id: string, updatedPatient: Partial<Patient>) => void;
   removePatient: (id: string) => void;
+  clearPatients: () => void;
 }
 
 export const usePatientStore = create<PatientState>()(
@@ -37,6 +38,8 @@ export const usePatientStore = create<PatientState>()(
       removePatient: (id) => set((state) => ({
         patients: state.patients.filter((patient) => patient.id !== id)
       })),
+
+      clearPatients: () => set({ patients: [] }),
     }),
     {
       name: 'ayurlekha-patients',
