@@ -1,421 +1,743 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Share,
-  Platform
-} from 'react-native';
-import { StatusBar } from 'expo-status-bar';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
-import { FileText, Share2, QrCode, Download, Calendar, Tag, User } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { usePatientStore } from '@/stores/patientStore';
+import React, { useState, useRef } from 'react'; // Import useRef for animations
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Linking, Share, Alert, SafeAreaView, Animated } from 'react-native'; // Import Animated
+import Markdown from 'react-native-markdown-display';
 
-// Mock data for demonstration
-const mockHistory = {
-  summary: "Patient has a history of seasonal allergies and occasional migraines. Regular check-ups show stable health with well-managed conditions. Blood pressure and cholesterol levels are within normal ranges.",
-  conditions: [
-    {
-      name: "Seasonal Allergies",
-      status: "Active",
-      lastUpdated: "2025-03-15",
-      details: "Managed with antihistamines during spring season"
-    },
-    {
-      name: "Migraine",
-      status: "Managed",
-      lastUpdated: "2025-02-20",
-      details: "Frequency reduced with preventive medication"
+// Add at the top of the file:
+// To use FontAwesome icons, install these packages:
+// npm install --save @fortawesome/react-native-fontawesome @fortawesome/fontawesome-svg-core @fortawesome/free-solid-svg-icons
+import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
+import { faShareNodes, faDownload, faQrcode, faSync } from '@fortawesome/free-solid-svg-icons';
+
+// The full Markdown content provided by the user
+const markdownContent = `
+### 📄 Patient Details
+
+**Patient:** Mr. Patient Kumar **DOB:** 1966-09-15 (**Age:** 59) **Blood Group:** B+
+
+---
+
+### 🩺 Primary Condition Summary
+
+⚠️ **ALERT:** *Immunocompromised post Bone Marrow Transplant (BMT).* **Special care needed regarding infections.**
+
+---
+
+## 🩺 Chronic Conditions
+
+| Condition                          | Since    | Status       | Notes                    |
+| ---------------------------------- | -------- | ------------ | ------------------------ |
+| Acute Myeloid Leukemia (AML)       | Oct 2022 | In Remission | Treated with BMT         |
+| Hypertension (HTN)                 | Ongoing  | Controlled   | Under medication         |
+| Benign Prostatic Hyperplasia (BPH) | Ongoing  | Monitored    | Annual urology follow-up |
+| Graft-Versus-Host Disease (GVHD)   | Nov 2023 | Stable       | Managed post BMT         |
+
+---
+### 📜 History Timeline
+
+- **Oct 2022**: Diagnosed with **AML**
+- **Apr 2023**: Underwent **Allogenic BMT** for AML
+- **Nov 2023**: Developed **GVHD** post-transplant
+- **Ongoing**: Diagnosed with **HTN**, **BPH**
+- **Since Jan 2024**: Recurrent respiratory complaints → suspected **Bronchiolitis**, treatment ongoing
+
+
+---
+
+### 🧪 Lab Tests Summary
+
+| Date     | Investigation            | Result / Notes            |
+| -------- | ------------------------ | ------------------------- |
+| Jan 2023 | CBC + Bone Marrow Biopsy | AML confirmed             |
+| Apr 2023 | HLA Matching             | Matched Donor found       |
+| Feb 2024 | Chest X-ray              | Mild Bronchial Thickening |
+| Jun 2024 | CT Chest (Planned)       | Pending - Planned         |
+
+---
+
+
+### 💊 Current Medications
+
+| Medication       | Dosage  | Frequency   | Indication               |
+| ---------------- | ------- | ----------- | ------------------------ |
+| Foracort Inhaler | 2 puffs | Twice daily | Asthma/Bronchial Support |
+| Deriphyllin      | 100mg   | Once daily  | Bronchodilation          |
+| Histafree        | 10mg    | Once daily  | Antihistamine            |
+| Telmisartan      | 40mg    | Once daily  | Blood Pressure           |
+| Tamsulosin       | 0.4mg   | Night (HS)  | BPH Management           |
+
+---
+
+
+### 📇 Doctor & Hospital Information
+
+| Type           | Name                      | Contact                   |
+|----------------|---------------------------|---------------------------|
+| Primary Oncologist | Dr. Ramesh Shetty        | +91-XXXXXXXXXX             |
+| Transplant Center | Medanta, Gurgaon         | +91-XXXX-XXXXX             |
+| Family Physician  | Dr. Anita Verma          | +91-XXXXXXXXXX             |
+
+---
+
+### 📞 Emergency Contacts
+
+| Name             | Relation | Phone          |
+|------------------|----------|----------------|
+| Mrs. Sunita Kumar| Spouse   | +91-XXXXXXXXXX |
+| Mr. Rajat Kumar  | Son      | +91-XXXXXXXXXX |
+
+---
+
+## 🧠 AI Agent Notes (Optional)
+
+\`\`\`json
+{
+  "active_conditions": ["GVHD", "HTN", "BPH"],
+  "critical_alerts": ["Post-BMT", "Immunocompromised"],
+  "next_tests": ["CT Chest (Plain)"],
+  "vaccination_plan": true
+}
+\`\`\`
+
+---
+
+**Date:** 13/07/2025
+
+**Generated by:** *Ayurlekha App*\\
+*Not a Medical Document*
+
+> **Disclaimer:** This document is a summary for informational purposes only and does not replace professional medical advice, diagnosis, or treatment. Always consult with a qualified healthcare provider for any medical concerns.
+`;
+
+// Function to parse the markdown into sections
+type SectionMap = { [key: string]: string };
+type Sections = Record<string, any>;
+const parseMarkdownSections = (markdown: string): Sections => {
+  const sections: Sections = {};
+  const lines: string[] = markdown.split('\n');
+  let currentSectionKey: string | null = null;
+  let currentContent: string[] = [];
+
+  const sectionMap: SectionMap = {
+    '### 📄 Patient Details': 'patientDetails',
+    '### 🩺 Primary Condition Summary': 'primaryConditionSummary',
+    '## 🩺 Chronic Conditions': 'chronicConditions',
+    '### 📜 History Timeline': 'historyTimeline',
+    '### 🧪 Lab Tests Summary': 'labTestsSummary',
+    '### 💊 Current Medications': 'currentMedications',
+    '### 📇 Doctor & Hospital Information': 'doctorHospitalInfo',
+    '### 📞 Emergency Contacts': 'emergencyContacts',
+    '## 🧠 AI Agent Notes (Optional)': 'aiAgentNotes',
+  };
+
+  // Helper to extract content until the next heading or end of document
+  const extractContent = (startIdx: number): { content: string; nextIndex: number } => {
+    const contentLines: string[] = [];
+    for (let i = startIdx; i < lines.length; i++) {
+      const line = lines[i];
+      let isHeading = false;
+      for (const heading in sectionMap) {
+        if (line.startsWith(heading)) {
+          isHeading = true;
+          break;
+        }
+      }
+      if (isHeading && i !== startIdx) { // If it's a new heading and not the current one
+        return { content: contentLines.join('\n').trim(), nextIndex: i };
+      }
+      contentLines.push(line);
     }
-  ],
-  medications: [
-    {
-      name: "Cetirizine",
-      dosage: "10mg",
-      frequency: "Daily during allergy season"
-    },
-    {
-      name: "Sumatriptan",
-      dosage: "50mg",
-      frequency: "As needed for migraines"
+    return { content: contentLines.join('\n').trim(), nextIndex: lines.length };
+  };
+
+  let currentIndex = 0;
+  while (currentIndex < lines.length) {
+    const line = lines[currentIndex];
+    let sectionFound = false;
+
+    for (const heading in sectionMap) {
+      if (line.startsWith(heading)) {
+        currentSectionKey = sectionMap[heading];
+        const { content, nextIndex } = extractContent(currentIndex);
+        sections[currentSectionKey] = content;
+        currentIndex = nextIndex;
+        sectionFound = true;
+        break;
+      }
     }
-  ],
-  recentVisits: [
-    {
-      date: "2025-03-15",
-      type: "Regular Check-up",
-      doctor: "Dr. Sarah Johnson",
-      notes: "Patient reported improved allergy symptoms"
-    },
-    {
-      date: "2025-02-20",
-      type: "Neurology Consultation",
-      doctor: "Dr. Michael Chen",
-      notes: "Migraine frequency decreased with current treatment plan"
+
+    if (!sectionFound) {
+      // Handle content before the first recognized heading or unparsed lines
+      if (!currentSectionKey) {
+        // This handles initial content before any specific section
+        if (!sections['intro']) sections['intro'] = '';
+        sections['intro'] += line + '\n';
+      }
+      currentIndex++;
     }
-  ]
+  }
+
+  // Post-process specific sections for header/snapshot
+  if (sections['patientDetails']) {
+    const nameMatch = sections['patientDetails'].match(/\*\*Patient:\*\* (.+?) \*\*DOB:\*\* (.+?) \(\*\*Age:\*\* (\d+)\) \*\*Blood Group:\*\* (.+)/);
+    sections['parsedPatientDetails'] = {
+      name: nameMatch ? nameMatch[1] : 'N/A',
+      dob: nameMatch ? nameMatch[2] : 'N/A',
+      age: nameMatch ? parseInt(nameMatch[3]) : 'N/A',
+      bloodGroup: nameMatch ? nameMatch[4] : 'N/A',
+    };
+  }
+
+  if (sections['primaryConditionSummary']) {
+    const alertMatch = sections['primaryConditionSummary'].match(/⚠️ \*\*ALERT:\*\* \*(.+?)\.\* \*\*Special care needed regarding infections\.\*\*/);
+    sections['parsedAlert'] = alertMatch ? alertMatch[1] : 'N/A';
+  }
+
+  if (sections['chronicConditions']) {
+    const amlStatusMatch = sections['chronicConditions'].match(/Acute Myeloid Leukemia \(AML\)\s*\|\s*[^|]+\|\s*([^|]+)/);
+    sections['parsedAmlStatus'] = amlStatusMatch ? amlStatusMatch[1].trim() : 'N/A';
+  }
+
+  if (sections['labTestsSummary']) {
+    const nextTestMatch = sections['labTestsSummary'].match(/CT Chest \(Planned\)\s*\|\s*(.+)/);
+    sections['parsedNextTest'] = nextTestMatch ? nextTestMatch[1].trim() : 'None';
+  }
+
+  // Extracting footer details
+  const fullMarkdownLines: string[] = markdown.split('\n');
+  const footerStartIndex: number = fullMarkdownLines.findIndex(line => line.includes('**Date:**'));
+  if (footerStartIndex !== -1) {
+    const footerContent = fullMarkdownLines.slice(footerStartIndex).join('\n');
+    const generatedByMatch = footerContent.match(/\*\*Generated by:\*\* \*(.+?)\*\s*\*(.+?)\*/s);
+    const disclaimerMatch = footerContent.match(/> \*\*Disclaimer:\*\* (.+)/s);
+
+    sections['parsedFooter'] = {
+      date: fullMarkdownLines[footerStartIndex].replace('**Date:** ', '').trim(),
+      generatedBy: generatedByMatch ? generatedByMatch[1].trim() : '',
+      notMedicalDocument: generatedByMatch ? generatedByMatch[2].trim() : '',
+      disclaimer: disclaimerMatch ? disclaimerMatch[1].trim() : '',
+    };
+  }
+
+  return sections;
 };
 
-export default function AyurLekhaScreen() {
-  const [selectedPatient, setSelectedPatient] = useState(null);
-  const { patients } = usePatientStore();
+const parsedData = parseMarkdownSections(markdownContent);
 
+const { width } = Dimensions.get('window');
+
+const MedicalSummaryScreen = () => {
+  const [activeTab, setActiveTab] = useState('History'); // Default active tab set to History
+  const [isFabOpen, setIsFabOpen] = useState(false); // State for FAB menu
+  const animation = useRef(new Animated.Value(0)).current; // For FAB animation
+
+  // Define tabs and their corresponding content
+  const tabs = [
+    { id: 'History', label: '📅 History', content: parsedData.historyTimeline },
+    { id: 'Conditions', label: '🩺 Conditions', content: parsedData.chronicConditions },
+    { id: 'Medications', label: '💊 Medications', content: parsedData.currentMedications },
+    { id: 'LabTests', label: '🧪 Lab Tests', content: parsedData.labTestsSummary },
+  ];
+
+  // Custom styles for Markdown rendering to mimic prescription look
+  const markdownStyles = StyleSheet.create({
+    body: {
+      fontFamily: 'serif', // Attempt to use a serif font
+      fontSize: 14,
+      lineHeight: 20,
+      color: '#333', // Dark gray for body text
+    },
+    heading1: {
+      fontSize: 24,
+      fontWeight: 'bold',
+      color: '#333',
+      marginBottom: 10,
+      marginTop: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: '#ccc',
+      paddingBottom: 5,
+    },
+    heading2: {
+      fontSize: 20,
+      fontWeight: 'bold',
+      color: '#444',
+      marginBottom: 8,
+      marginTop: 8,
+    },
+    heading3: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: '#555',
+      marginBottom: 6,
+      marginTop: 6,
+    },
+    heading4: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: '#666',
+      marginBottom: 4,
+      marginTop: 4,
+    },
+    strong: {
+      fontWeight: 'bold',
+      color: '#222',
+    },
+    em: {
+      fontStyle: 'italic',
+      color: '#555',
+    },
+    list_item: {
+      fontSize: 14,
+      lineHeight: 20,
+      color: '#333',
+    },
+    bullet_list: {
+      marginBottom: 10,
+    },
+    ordered_list: {
+      marginBottom: 10,
+    },
+    table: {
+      borderWidth: 1,
+      borderColor: '#ccc',
+      borderRadius: 4,
+      marginBottom: 10,
+    },
+    thead: {
+      backgroundColor: '#f0f0f0',
+    },
+    th: {
+      fontWeight: 'bold',
+      padding: 8,
+      borderBottomWidth: 1,
+      borderBottomColor: '#ccc',
+      textAlign: 'left',
+    },
+    tr: {
+      borderBottomWidth: 1,
+      borderBottomColor: '#eee',
+    },
+    td: {
+      padding: 8,
+      textAlign: 'left',
+    },
+    link: {
+      color: '#007bff',
+      textDecorationLine: 'underline',
+    },
+    blockquote: {
+      borderLeftWidth: 4,
+      borderLeftColor: '#ccc',
+      paddingLeft: 10,
+      fontStyle: 'italic',
+      color: '#555',
+    },
+    code_inline: {
+      backgroundColor: '#f0f0f0',
+      paddingHorizontal: 4,
+      borderRadius: 3,
+      fontFamily: 'monospace',
+    },
+    code_block: {
+      backgroundColor: '#f0f0f0',
+      padding: 10,
+      borderRadius: 5,
+      fontFamily: 'monospace',
+      marginBottom: 10,
+    },
+  });
+
+  // Action button handlers
   const handleShare = async () => {
     try {
       const result = await Share.share({
-        message: 'Medical History Report',
-        url: Platform.select({
-          ios: 'medical-history.pdf',
-          default: 'file://medical-history.pdf'
-        }),
-        title: 'AyurLekha Medical History'
+        message: `Patient Medical Summary for ${parsedData.parsedPatientDetails?.name || 'Mr. Patient Kumar'}:\n\n${markdownContent}`,
+        url: 'https://ayurlekha.app/summary', // Replace with your app's shareable link
+        title: 'Patient Medical Summary',
       });
+      if (result.action === Share.sharedAction) {
+        if (result.activityType) {
+          // shared with activity type of result.activityType
+        } else {
+          // shared
+        }
+      } else if (result.action === Share.dismissedAction) {
+        // dismissed
+      }
     } catch (error) {
-      console.error(error);
+      if (error instanceof Error) {
+        Alert.alert('Share Error', error.message);
+      } else {
+        Alert.alert('Share Error', 'An unknown error occurred.');
+      }
     }
+    setIsFabOpen(false); // Close FAB after action
   };
 
+  const handleQRCode = () => {
+    Alert.alert('QR Code', 'A QR code for this summary would be generated here.');
+    // In a real app, you would generate and display a QR code image here.
+    setIsFabOpen(false); // Close FAB after action
+  };
+
+  const handleDownload = () => {
+    Alert.alert('Download', 'This summary would be downloaded to your device.');
+    // In a real app, you would implement file download logic here.
+    setIsFabOpen(false); // Close FAB after action
+  };
+
+  const toggleFab = () => {
+    const toValue = isFabOpen ? 0 : 1;
+    Animated.spring(animation, {
+      toValue,
+      friction: 5,
+      useNativeDriver: true,
+    }).start();
+    setIsFabOpen(!isFabOpen);
+  };
+
+  const shareTranslate = animation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -70], // Distance from main FAB
+  });
+  const qrTranslate = animation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -130], // Distance from main FAB
+  });
+  const downloadTranslate = animation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -190], // Distance from main FAB
+  });
+
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <StatusBar style="dark" />
-      
-      <View style={styles.header}>
-        <Text style={styles.title}>AyurLekha</Text>
-        <Text style={styles.subtitle}>AI-Generated Medical History</Text>
-      </View>
-
-      <ScrollView 
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.patientSection}>
-          <Image
-            source={{ uri: "https://images.pexels.com/photos/7089629/pexels-photo-7089629.jpeg" }}
-            style={styles.patientImage}
-            contentFit="cover"
-          />
-          <View style={styles.patientInfo}>
-            <Text style={styles.patientName}>John Doe</Text>
-            <Text style={styles.patientDetails}>42 years • Male</Text>
-          </View>
-        </View>
-
-        <View style={styles.summaryCard}>
-          <LinearGradient
-            colors={['#4A90E2', '#357ABD']}
-            style={styles.summaryGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <FileText color="#FFFFFF" size={24} style={styles.summaryIcon} />
-            <Text style={styles.summaryTitle}>Health Summary</Text>
-            <Text style={styles.summaryText}>{mockHistory.summary}</Text>
-          </LinearGradient>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Current Conditions</Text>
-          {mockHistory.conditions.map((condition, index) => (
-            <View key={index} style={styles.conditionCard}>
-              <View style={styles.conditionHeader}>
-                <Text style={styles.conditionName}>{condition.name}</Text>
-                <View style={[
-                  styles.statusBadge,
-                  { backgroundColor: condition.status === 'Active' ? '#FFE4E4' : '#E8F5E9' }
-                ]}>
-                  <Text style={[
-                    styles.statusText,
-                    { color: condition.status === 'Active' ? '#E53935' : '#4CAF50' }
-                  ]}>{condition.status}</Text>
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.mainContainer}>
+        <ScrollView style={styles.scrollViewContent}>
+          <View style={styles.prescriptionSlip}>
+            {/* Header Section */}
+            <View style={styles.header}>
+              <View style={styles.headerTop}>
+                {/* Removed Rx */}
+                <View style={styles.headerTitleContainer}>
+                  <Text style={styles.headerTitle}>Patient Medical Record</Text>
+                  <Text style={styles.lastUpdatedText}>Last Updated: {parsedData.parsedFooter?.date || 'N/A'}</Text>
                 </View>
               </View>
-              <Text style={styles.conditionDetails}>{condition.details}</Text>
-              <View style={styles.conditionFooter}>
-                <Calendar size={14} color="#757575" />
-                <Text style={styles.dateText}>Last updated: {condition.lastUpdated}</Text>
+
+              {/* Patient Demographics & Snapshot in Header */}
+              <View style={styles.patientSnapshotContainer}>
+                <View style={styles.patientInfoColumn}>
+                  <Text style={styles.patientInfoText}><Text style={styles.boldText}>Patient:</Text> {parsedData.parsedPatientDetails?.name || 'N/A'}</Text>
+                  <Text style={styles.patientInfoText}><Text style={styles.boldText}>DOB:</Text> {parsedData.parsedPatientDetails?.dob || 'N/A'} (Age: {parsedData.parsedPatientDetails?.age || 'N/A'})</Text>
+                  <Text style={styles.patientInfoText}><Text style={styles.boldText}>Blood Group:</Text> {parsedData.parsedPatientDetails?.bloodGroup || 'N/A'}</Text>
+                </View>
+                <View style={styles.vitalsColumn}>
+                  <Text style={styles.snapshotLabel}>Primary Condition Status:</Text>
+                  <Text style={styles.amlStatusText}>{parsedData.parsedAmlStatus || 'N/A'}</Text>
+                  <Text style={styles.snapshotLabel}>Next Action/Test:</Text>
+                  <Text style={styles.nextTestText}>{parsedData.parsedNextTest || 'None'}</Text>
+                  <Text style={styles.alertText}>
+                    ⚠️ ALERT: {parsedData.parsedAlert || 'N/A'}
+                  </Text>
+                </View>
               </View>
             </View>
-          ))}
-        </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Current Medications</Text>
-          {mockHistory.medications.map((medication, index) => (
-            <View key={index} style={styles.medicationCard}>
-              <Text style={styles.medicationName}>{medication.name}</Text>
-              <Text style={styles.medicationDetails}>
-                {medication.dosage} • {medication.frequency}
+            {/* Tab Navigation */}
+            <View style={styles.tabContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {tabs.map((tab) => (
+                  <TouchableOpacity
+                    key={tab.id}
+                    style={[styles.tabButton, activeTab === tab.id && styles.activeTabButton]}
+                    onPress={() => setActiveTab(tab.id)}
+                  >
+                    <Text style={[styles.tabButtonText, activeTab === tab.id && styles.activeTabButtonText]}>
+                      {tab.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+
+            {/* Tab Content */}
+            <View style={styles.tabContent}>
+              <Markdown style={markdownStyles}>
+                {tabs.find(tab => tab.id === activeTab)?.content || 'No content available for this section.'}
+              </Markdown>
+            </View>
+
+            {/* Footer */}
+            <View style={styles.footer}>
+              <View style={styles.footerDetails}>
+                <Text style={styles.footerText}><Text style={styles.boldText}>Date:</Text> {parsedData.parsedFooter?.date || 'N/A'}</Text>
+                <Text style={styles.footerText}><Text style={styles.boldText}>Ref:</Text> {parsedData.demographics?.patientId || 'N/A'}</Text>
+              </View>
+              {/* Ayurlekha branding as a small line in footer */}
+              <Text style={styles.ayurlekhaSmallText}>
+                Generated by: Ayurlekha App | Not a Medical Document
               </Text>
             </View>
-          ))}
-        </View>
+            <Text style={styles.disclaimerText}>
+              Disclaimer: {parsedData.parsedFooter?.disclaimer || 'This document is a summary for informational purposes only and does not replace professional medical advice, diagnosis, or treatment. Always consult with a qualified healthcare provider for any medical concerns.'}
+            </Text>
+          </View>
+        </ScrollView>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Recent Medical Visits</Text>
-          {mockHistory.recentVisits.map((visit, index) => (
-            <View key={index} style={styles.visitCard}>
-              <View style={styles.visitHeader}>
-                <Text style={styles.visitType}>{visit.type}</Text>
-                <Text style={styles.visitDate}>{visit.date}</Text>
-              </View>
-              <Text style={styles.doctorName}>{visit.doctor}</Text>
-              <Text style={styles.visitNotes}>{visit.notes}</Text>
-            </View>
-          ))}
-        </View>
-      </ScrollView>
+        {/* FAB and Sub-buttons */}
+        <View style={styles.fabContainer}>
+          <Animated.View style={[styles.fabSubButton, { transform: [{ translateY: downloadTranslate }] }]}>
+            <TouchableOpacity onPress={handleDownload} style={styles.fabSubButtonInner}>
+              <FontAwesomeIcon icon={faDownload} size={20} color="#fff" />
+              <Text style={styles.fabSubButtonText}>Download</Text>
+            </TouchableOpacity>
+          </Animated.View>
+          <Animated.View style={[styles.fabSubButton, { transform: [{ translateY: qrTranslate }] }]}>
+            <TouchableOpacity onPress={handleQRCode} style={styles.fabSubButtonInner}>
+              <FontAwesomeIcon icon={faQrcode} size={20} color="#fff" />
+              <Text style={styles.fabSubButtonText}>QR Code</Text>
+            </TouchableOpacity>
+          </Animated.View>
+          <Animated.View style={[styles.fabSubButton, { transform: [{ translateY: shareTranslate }] }]}>
+            <TouchableOpacity onPress={handleShare} style={styles.fabSubButtonInner}>
+              <FontAwesomeIcon icon={faShareNodes} size={20} color="#fff" />
+              <Text style={styles.fabSubButtonText}>Share</Text>
+            </TouchableOpacity>
+          </Animated.View>
 
-      <View style={styles.actionBar}>
-        <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
-          <Share2 size={20} color="#4A90E2" />
-          <Text style={styles.actionText}>Share</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionButton}>
-          <QrCode size={20} color="#4A90E2" />
-          <Text style={styles.actionText}>QR Code</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionButton}>
-          <Download size={20} color="#4A90E2" />
-          <Text style={styles.actionText}>Download</Text>
-        </TouchableOpacity>
+          <TouchableOpacity style={styles.fabButton} onPress={toggleFab}>
+            <FontAwesomeIcon icon={faSync} size={30} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
     </SafeAreaView>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: '#F7F9FC',
+    backgroundColor: '#f0f0f0',
   },
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 10,
-  },
-  title: {
-    fontFamily: 'Inter-Bold',
-    fontSize: 28,
-    color: '#333333',
-  },
-  subtitle: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 16,
-    color: '#757575',
-    marginTop: 4,
-  },
-  scrollView: {
+  mainContainer: {
     flex: 1,
+    backgroundColor: '#f0f0f0',
   },
-  scrollContent: {
-    paddingBottom: 100,
+  scrollViewContent: {
+    flex: 1,
+    padding: 10, // Padding around the slip
+    paddingBottom: 100, // Increased padding to make space for the FAB
   },
-  patientSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    margin: 20,
-    padding: 16,
-    borderRadius: 16,
+  prescriptionSlip: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#555',
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 5,
+    marginVertical: 10,
+    alignSelf: 'center',
+    maxWidth: 600,
   },
-  patientImage: {
+  header: {
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ccc',
+  },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 15,
+  },
+  headerTitleContainer: {
+    alignItems: 'flex-start', // Align title to left
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#333',
+    fontFamily: 'serif',
+  },
+  lastUpdatedText: {
+    fontSize: 10,
+    color: '#666',
+    fontFamily: 'serif',
+    marginTop: 5, // Space from title
+  },
+  patientSnapshotContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: 15,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    marginTop: 15,
+  },
+  patientInfoColumn: {
+    flex: 1,
+    marginRight: 10,
+  },
+  vitalsColumn: {
+    flex: 1,
+    marginLeft: 10,
+  },
+  patientInfoText: {
+    fontSize: 13,
+    color: '#444',
+    marginBottom: 4,
+    fontFamily: 'serif',
+  },
+  boldText: {
+    fontWeight: 'bold',
+  },
+  snapshotLabel: {
+    fontSize: 11,
+    color: '#777',
+    fontFamily: 'serif',
+  },
+  amlStatusText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#28a745', // Green for 'In Remission'
+    fontFamily: 'serif',
+    marginBottom: 8,
+  },
+  nextTestText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#ffc107', // Orange for 'Planned'
+    fontFamily: 'serif',
+    marginBottom: 8,
+  },
+  alertText: {
+    fontSize: 11,
+    color: '#dc3545', // Red for alert
+    fontWeight: 'bold',
+    fontFamily: 'serif',
+    marginTop: 5,
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#f8f8f8',
+    borderBottomWidth: 1,
+    borderBottomColor: '#ccc',
+    paddingHorizontal: 10,
+  },
+  tabButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  activeTabButton: {
+    borderBottomColor: '#555',
+    backgroundColor: '#fff',
+  },
+  tabButtonText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#666',
+    fontFamily: 'serif',
+  },
+  activeTabButtonText: {
+    color: '#333',
+    fontWeight: 'bold',
+  },
+  tabContent: {
+    padding: 20,
+    minHeight: 250,
+  },
+  footer: {
+    flexDirection: 'column',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#ccc',
+  },
+  footerDetails: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginBottom: 10,
+  },
+  footerText: {
+    fontSize: 12,
+    color: '#555',
+    marginBottom: 4,
+    fontFamily: 'serif',
+  },
+  ayurlekhaSmallText: {
+    fontSize: 10,
+    color: '#777',
+    fontFamily: 'serif',
+    textAlign: 'center',
+  },
+  disclaimerText: {
+    fontSize: 10,
+    color: '#777',
+    textAlign: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    fontFamily: 'serif',
+  },
+  // FAB Styles
+  fabContainer: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    alignItems: 'center',
+  },
+  fabButton: {
+    backgroundColor: '#000', // Dark gray FAB
     width: 60,
     height: 60,
     borderRadius: 30,
-    marginRight: 16,
-  },
-  patientInfo: {
-    flex: 1,
-  },
-  patientName: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 18,
-    color: '#333333',
-  },
-  patientDetails: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 14,
-    color: '#757575',
-    marginTop: 4,
-  },
-  summaryCard: {
-    marginHorizontal: 20,
-    marginBottom: 20,
-    borderRadius: 16,
-    overflow: 'hidden',
-    shadowColor: '#4A90E2',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
     elevation: 5,
   },
-  summaryGradient: {
-    padding: 20,
+  fabButtonIcon: {
+    fontSize: 30,
+    color: '#fff', // White icon
   },
-  summaryIcon: {
-    marginBottom: 12,
-  },
-  summaryTitle: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 18,
-    color: '#FFFFFF',
-    marginBottom: 8,
-  },
-  summaryText: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 14,
-    color: '#FFFFFF',
-    lineHeight: 20,
-    opacity: 0.9,
-  },
-  section: {
-    marginHorizontal: 20,
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 18,
-    color: '#333333',
-    marginBottom: 12,
-  },
-  conditionCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  conditionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  conditionName: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 16,
-    color: '#333333',
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  statusText: {
-    fontFamily: 'Inter-Medium',
-    fontSize: 12,
-  },
-  conditionDetails: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 14,
-    color: '#757575',
-    marginBottom: 8,
-  },
-  conditionFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  dateText: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 12,
-    color: '#757575',
-    marginLeft: 4,
-  },
-  medicationCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  medicationName: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 16,
-    color: '#333333',
-    marginBottom: 4,
-  },
-  medicationDetails: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 14,
-    color: '#757575',
-  },
-  visitCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  visitHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  visitType: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 16,
-    color: '#333333',
-  },
-  visitDate: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 14,
-    color: '#757575',
-  },
-  doctorName: {
-    fontFamily: 'Inter-Medium',
-    fontSize: 14,
-    color: '#4A90E2',
-    marginBottom: 4,
-  },
-  visitNotes: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 14,
-    color: '#757575',
-  },
-  actionBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+  fabSubButton: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-  },
-  actionButton: {
-    alignItems: 'center',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#777', // Slightly lighter gray for sub-buttons
     justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
+    marginBottom: 10, // Space between sub-buttons
   },
-  actionText: {
-    fontFamily: 'Inter-Medium',
-    fontSize: 12,
-    color: '#4A90E2',
-    marginTop: 4,
+  fabSubButtonInner: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fabSubButtonIcon: {
+    fontSize: 20,
+    color: '#fff',
+  },
+  fabSubButtonText: {
+    fontSize: 10,
+    color: '#fff',
+    fontFamily: 'serif',
+    marginTop: 2,
   },
 });
+
+export default MedicalSummaryScreen;

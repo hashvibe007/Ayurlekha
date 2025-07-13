@@ -270,3 +270,17 @@ export const uploadAyurlekhaSummary = async (
   if (error) throw error;
   return data;
 };
+
+// Fetch patients for the current user, including ayurlekha_generated_at
+export const fetchPatientsWithAyurlekha = async () => {
+  const session = await supabase.auth.getSession();
+  const userId = session.data.session?.user.id;
+  if (!userId) throw new Error('User not authenticated');
+  const { data, error } = await supabase
+    .from('patients')
+    .select('id, name, age, gender, height, ailments, medications, ayurlekha_generated_at')
+    .eq('user_id', userId)
+    .order('name', { ascending: true });
+  if (error) throw error;
+  return data || [];
+};
