@@ -1,119 +1,66 @@
 import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Dimensions
-} from 'react-native';
-import { Image } from 'expo-image';
-import { Calendar, Tag } from 'lucide-react-native';
+import { View, Text, StyleSheet, ImageBackground } from 'react-native';
 
-interface RecentCardProps {
-  title: string;
-  date: string;
-  category: string;
-  patientName: string;
-  imageUrl: string;
-}
+const typeBackgrounds: Record<string, any> = {
+  laboratory: require('@/assets/images/lab-bg.png'),
+  radiology: require('@/assets/images/radiology-bg.png'),
+  prescription: require('@/assets/images/prescription-bg.png'),
+  scan: require('@/assets/images/scan-bg.png'),
+  document: require('@/assets/images/document-bg.png'),
+  general: require('@/assets/images/general-bg.png'),
+  default: require('@/assets/images/default-bg.png'),
+};
 
-const { width } = Dimensions.get('window');
-const cardWidth = width * 0.7;
-
-export function RecentCard({ title, date, category, patientName, imageUrl }: RecentCardProps) {
+export const RecentCard = ({ title, date, category, patientName, imageUrl }) => {
+  const bgImage = typeBackgrounds[category?.toLowerCase()] || typeBackgrounds.default;
   return (
-    <TouchableOpacity style={styles.cardContainer}>
-      <Image
-        source={{ uri: imageUrl }}
-        style={styles.cardImage}
-        contentFit="cover"
-        transition={300}
-      />
-      <View style={styles.overlay} />
-      <View style={styles.contentContainer}>
-        <Text style={styles.title} numberOfLines={1}>{title}</Text>
-        <View style={styles.detailsContainer}>
-          <View style={styles.detailRow}>
-            <Calendar size={14} color="#FFFFFF" style={styles.icon} />
-            <Text style={styles.detailText}>{date}</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Tag size={14} color="#FFFFFF" style={styles.icon} />
-            <Text style={styles.detailText}>{category}</Text>
-          </View>
-        </View>
-        <View style={styles.patientContainer}>
-          <Text style={styles.patientText}>{patientName}</Text>
-        </View>
+    <ImageBackground source={bgImage} style={styles.card} imageStyle={{ borderRadius: 12, opacity: 0.25 }}>
+      <View style={styles.content}>
+        <Text style={styles.title}>{title}</Text>
+        <Text style={styles.date}>{date}</Text>
+        <Text style={styles.category}>{category}</Text>
+        <Text style={styles.patientName}>{patientName}</Text>
       </View>
-    </TouchableOpacity>
+    </ImageBackground>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  cardContainer: {
-    width: cardWidth,
-    height: 180,
-    borderRadius: 16,
-    marginRight: 15,
+  card: {
+    width: 180,
+    height: 120,
+    borderRadius: 12,
+    marginRight: 16,
     overflow: 'hidden',
+    justifyContent: 'flex-end',
+    backgroundColor: '#fff',
+    elevation: 3,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowRadius: 4,
   },
-  cardImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 16,
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    borderRadius: 16,
-  },
-  contentContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 16,
+  content: {
+    padding: 12,
   },
   title: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 18,
-    color: '#FFFFFF',
-    marginBottom: 8,
+    fontWeight: 'bold',
+    fontSize: 16,
+    color: '#222',
   },
-  detailsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  icon: {
-    marginRight: 4,
-  },
-  detailText: {
-    fontFamily: 'Inter-Medium',
+  date: {
     fontSize: 12,
-    color: '#FFFFFF',
-    opacity: 0.9,
+    color: '#666',
+    marginTop: 2,
   },
-  patientContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 4,
-    alignSelf: 'flex-start',
-  },
-  patientText: {
-    fontFamily: 'Inter-Medium',
+  category: {
     fontSize: 12,
-    color: '#FFFFFF',
+    color: '#4A90E2',
+    marginTop: 2,
+  },
+  patientName: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 2,
   },
 });

@@ -10,7 +10,8 @@ import {
   Dimensions,
   RefreshControl,
   Modal,
-  Image
+  Image,
+  Share
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,8 +22,11 @@ import { useRecordStore } from '@/stores/recordStore';
 import { usePatientStore } from '@/stores/patientStore';
 import { Picker } from '@react-native-picker/picker';
 import { WebView } from 'react-native-webview';
+import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
+import { faShareNodes, faTimes } from '@fortawesome/free-solid-svg-icons';
+import { supabase } from '@/lib/supabase';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 const categories = [
   { id: 'all', name: 'All' },
@@ -41,6 +45,7 @@ export default function RecordsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [viewerVisible, setViewerVisible] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   
   const { records, isLoading, fetchRecords } = useRecordStore();
   const { patients } = usePatientStore();
@@ -88,9 +93,20 @@ export default function RecordsScreen() {
     setRefreshing(false);
   };
 
-  const handleRecordPress = (record: any) => {
-    setSelectedRecord(record);
-    setViewerVisible(true);
+  const handleRecordPress = async (record: any) => {
+    // Get signed URL for the file
+    try {
+      const filePath = record.file_path || record.file_url?.replace(/^.*medical-documents\//, '');
+      const { data, error } = await supabase.storage.from('medical-documents').createSignedUrl(filePath, 60 * 5);
+      if (error || !data?.signedUrl) throw error || new Error('Failed to get signed URL');
+      setPreviewUrl(data.signedUrl);
+      setSelectedRecord(record);
+      setViewerVisible(true);
+    } catch (e) {
+      setPreviewUrl(null);
+      setSelectedRecord(record);
+      setViewerVisible(true);
+    }
   };
 
   const getIconForFileType = (fileType: string) => {
@@ -189,17 +205,34 @@ export default function RecordsScreen() {
       />
       {/* Document Viewer Modal */}
       <Modal visible={viewerVisible} animationType="slide" onRequestClose={() => setViewerVisible(false)}>
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }}>
-          <TouchableOpacity style={{ padding: 16, alignSelf: 'flex-end' }} onPress={() => setViewerVisible(false)}>
-            <Text style={{ color: '#fff', fontSize: 18 }}>Close</Text>
-          </TouchableOpacity>
-          {selectedRecord && selectedRecord.file_type.includes('image') ? (
-            <Image source={{ uri: selectedRecord.file_url }} style={{ flex: 1, resizeMode: 'contain' }} />
-          ) : selectedRecord && selectedRecord.file_type.includes('pdf') ? (
-            <WebView source={{ uri: selectedRecord.file_url }} style={{ flex: 1 }} />
-          ) : (
-            <Text style={{ color: '#fff', textAlign: 'center', marginTop: 40 }}>Cannot preview this file type.</Text>
-          )}
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ width: width * 0.95, height: height * 0.7, backgroundColor: '#111', borderRadius: 16, overflow: 'hidden', justifyContent: 'center', alignItems: 'center' }}>
+            {selectedRecord && previewUrl && selectedRecord.file_type.includes('image') ? (
+              <Image source={{ uri: previewUrl }} style={{ width: '100%', height: '85%', resizeMode: 'contain' }} />
+            ) : selectedRecord && previewUrl && selectedRecord.file_type.includes('pdf') ? (
+              <WebView source={{ uri: previewUrl }} style={{ width: '100%', height: '85%' }} />
+            ) : (
+              <Text style={{ color: '#fff', textAlign: 'center', marginTop: 40 }}>Cannot preview this file type.</Text>
+            )}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', padding: 16, backgroundColor: '#111' }}>
+              <TouchableOpacity onPress={() => setViewerVisible(false)}>
+                <FontAwesomeIcon icon={faTimes} size={22} color="#fff" />
+              </TouchableOpacity>
+              {selectedRecord && previewUrl && (
+                <TouchableOpacity onPress={async () => {
+                  try {
+                    await Share.share({
+                      message: previewUrl,
+                      url: previewUrl,
+                      title: selectedRecord.title,
+                    });
+                  } catch (e) {}
+                }}>
+                  <FontAwesomeIcon icon={faShareNodes} size={22} color="#4A90E2" style={{ marginLeft: 16 }} />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
         </SafeAreaView>
       </Modal>
     </SafeAreaView>

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -16,10 +16,7 @@ import { deleteUser } from '@/lib/supabase';
 
 export default function SettingsScreen() {
   const { user, signOut } = useAuth();
-  const [notificationsEnabled, setNotificationsEnabled] = React.useState(true);
-  const [biometricEnabled, setBiometricEnabled] = React.useState(false);
-  const [darkModeEnabled, setDarkModeEnabled] = React.useState(false);
-  const [autoBackupEnabled, setAutoBackupEnabled] = React.useState(true);
+  const [profileVisible, setProfileVisible] = useState(false);
 
   const toggleSwitch = (setter: React.Dispatch<React.SetStateAction<boolean>>) => (value: boolean) => {
     setter(value);
@@ -27,7 +24,6 @@ export default function SettingsScreen() {
 
   const handleDeleteUser = async () => {
     if (!user?.id) return;
-    // Confirm delete
     if (!window.confirm('Are you sure you want to delete your account? This cannot be undone.')) return;
     try {
       await deleteUser(user.id);
@@ -41,116 +37,19 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar style="dark" />
-      
       <View style={styles.header}>
         <Text style={styles.title}>Settings</Text>
       </View>
-      
-      <ScrollView 
-        style={styles.scrollView}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account</Text>
-          
-          <TouchableOpacity style={styles.settingItem}>
-            <View style={styles.settingInfo}>
-              <View style={[styles.iconContainer, { backgroundColor: '#E8F1FF' }]}>
-                <UserCircle color="#4A90E2" size={20} />
-              </View>
-              <Text style={styles.settingText}>Profile</Text>
+      <View style={styles.content}>
+        <TouchableOpacity style={styles.settingItem} onPress={() => setProfileVisible(true)}>
+          <View style={styles.settingInfo}>
+            <View style={[styles.iconContainer, { backgroundColor: '#E8F1FF' }]}> 
+              <UserCircle color="#4A90E2" size={20} />
             </View>
-            <ChevronRight color="#9E9E9E" size={20} />
-          </TouchableOpacity>
-        </View>
-        
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Preferences</Text>
-          
-          <View style={styles.settingItem}>
-            <View style={styles.settingInfo}>
-              <View style={[styles.iconContainer, { backgroundColor: '#FFF0E6' }]}>
-                <Bell color="#FB8C00" size={20} />
-              </View>
-              <Text style={styles.settingText}>Notifications</Text>
-            </View>
-            <Switch
-              trackColor={{ false: '#E0E0E0', true: '#A5C9F6' }}
-              thumbColor={notificationsEnabled ? '#4A90E2' : '#F5F5F5'}
-              ios_backgroundColor="#E0E0E0"
-              onValueChange={toggleSwitch(setNotificationsEnabled)}
-              value={notificationsEnabled}
-            />
+            <Text style={styles.settingText}>Profile</Text>
           </View>
-          
-          <View style={styles.settingItem}>
-            <View style={styles.settingInfo}>
-              <View style={[styles.iconContainer, { backgroundColor: '#E8F5E9' }]}>
-                <Shield color="#4CAF50" size={20} />
-              </View>
-              <Text style={styles.settingText}>Biometric Authentication</Text>
-            </View>
-            <Switch
-              trackColor={{ false: '#E0E0E0', true: '#A5C9F6' }}
-              thumbColor={biometricEnabled ? '#4A90E2' : '#F5F5F5'}
-              ios_backgroundColor="#E0E0E0"
-              onValueChange={toggleSwitch(setBiometricEnabled)}
-              value={biometricEnabled}
-            />
-          </View>
-          
-          <View style={styles.settingItem}>
-            <View style={styles.settingInfo}>
-              <View style={[styles.iconContainer, { backgroundColor: '#E8F1FF' }]}>
-                <Smartphone color="#4A90E2" size={20} />
-              </View>
-              <Text style={styles.settingText}>Dark Mode</Text>
-            </View>
-            <Switch
-              trackColor={{ false: '#E0E0E0', true: '#A5C9F6' }}
-              thumbColor={darkModeEnabled ? '#4A90E2' : '#F5F5F5'}
-              ios_backgroundColor="#E0E0E0"
-              onValueChange={toggleSwitch(setDarkModeEnabled)}
-              value={darkModeEnabled}
-            />
-          </View>
-        </View>
-        
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Data & Storage</Text>
-          
-          <View style={styles.settingItem}>
-            <View style={styles.settingInfo}>
-              <View style={[styles.iconContainer, { backgroundColor: '#E1F5FE' }]}>
-                <CloudUpload color="#03A9F4" size={20} />
-              </View>
-              <Text style={styles.settingText}>Auto Backup</Text>
-            </View>
-            <Switch
-              trackColor={{ false: '#E0E0E0', true: '#A5C9F6' }}
-              thumbColor={autoBackupEnabled ? '#4A90E2' : '#F5F5F5'}
-              ios_backgroundColor="#E0E0E0"
-              onValueChange={toggleSwitch(setAutoBackupEnabled)}
-              value={autoBackupEnabled}
-            />
-          </View>
-        </View>
-        
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Support</Text>
-          
-          <TouchableOpacity style={styles.settingItem}>
-            <View style={styles.settingInfo}>
-              <View style={[styles.iconContainer, { backgroundColor: '#E8F1FF' }]}>
-                <HelpCircle color="#4A90E2" size={20} />
-              </View>
-              <Text style={styles.settingText}>Help & Support</Text>
-            </View>
-            <ChevronRight color="#9E9E9E" size={20} />
-          </TouchableOpacity>
-        </View>
-        
+          <ChevronRight color="#9E9E9E" size={20} />
+        </TouchableOpacity>
         <TouchableOpacity style={styles.logoutButton} onPress={signOut}>
           <LogOut color="#E53935" size={20} style={{ marginRight: 8 }} />
           <Text style={styles.logoutText}>Log Out</Text>
@@ -158,9 +57,21 @@ export default function SettingsScreen() {
         <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteUser}>
           <Text style={styles.deleteText}>Delete Account</Text>
         </TouchableOpacity>
-        
         <Text style={styles.versionText}>Ayurlekha v1.0.0</Text>
-      </ScrollView>
+      </View>
+      {/* Profile Modal */}
+      {profileVisible && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 24, width: 300, alignItems: 'center' }}>
+            <UserCircle color="#4A90E2" size={48} style={{ marginBottom: 12 }} />
+            <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 8 }}>{user?.name || user?.email || 'User'}</Text>
+            <Text style={{ fontSize: 15, color: '#555', marginBottom: 16 }}>{user?.email}</Text>
+            <TouchableOpacity onPress={() => setProfileVisible(false)} style={{ marginTop: 12 }}>
+              <Text style={{ color: '#4A90E2', fontWeight: 'bold' }}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }

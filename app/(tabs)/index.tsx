@@ -23,7 +23,6 @@ import {
 import { SplashScreen } from 'expo-router';
 import { usePatientStore } from '@/stores/patientStore';
 import { useRecordStore } from '@/stores/recordStore';
-import { FAB } from '@/components/FAB';
 import { UploadModal } from '@/components/UploadModal';
 import { RecentCard } from '@/components/RecentCard';
 
@@ -194,7 +193,6 @@ export default function HomeScreen() {
         </View>
       </ScrollView>
 
-      <FAB onPress={() => setModalVisible(true)} />
       <UploadModal visible={modalVisible} onClose={() => setModalVisible(false)} />
     </SafeAreaView>
   );
