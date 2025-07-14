@@ -6,7 +6,8 @@ import {
   FlatList,
   TouchableOpacity,
   TextInput,
-  Dimensions
+  Dimensions,
+  Alert
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -34,8 +35,22 @@ export default function PatientsScreen() {
     setIsModalVisible(true);
   };
   const handleDeletePatient = async (patient: any) => {
-    await deletePatient(patient.id);
-    removePatient(patient.id);
+    Alert.alert(
+      'Delete Patient',
+      'Are you sure you want to delete this patient and all their records? This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: async () => {
+          // Delete from Supabase (patient, records, storage)
+          await deletePatient(patient.id); // existing logic
+          removePatient(patient.id); // local store
+          // TODO: Delete all records and storage for this patient (implement in backend or here)
+          setIsModalVisible(false);
+          setEditPatient(null);
+          Alert.alert('Patient deleted');
+        }}
+      ]
+    );
   };
 
   const filteredPatients = searchQuery.trim() === '' 
@@ -114,6 +129,7 @@ export default function PatientsScreen() {
               getConditionIcon={getConditionIcon}
               onEdit={() => handleEditPatient(item)}
               onDelete={() => handleDeletePatient(item)}
+              onPress={() => handleEditPatient(item)} // Enable edit on press
             />
           )}
           keyExtractor={(item, index) => index.toString()}
@@ -148,6 +164,7 @@ export default function PatientsScreen() {
         onAddPatient={addPatient}
         editMode={!!editPatient}
         patient={editPatient}
+        onDelete={editPatient ? () => handleDeletePatient(editPatient) : undefined}
       />
     </SafeAreaView>
   );

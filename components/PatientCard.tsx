@@ -13,6 +13,7 @@ interface PatientCardProps {
   gender: string;
   ailments?: string[];
   getConditionIcon: (condition: string) => React.ReactNode;
+  onPress?: () => void;
 }
 
 export function PatientCard({ 
@@ -20,10 +21,11 @@ export function PatientCard({
   age, 
   gender, 
   ailments = [],
-  getConditionIcon
+  getConditionIcon,
+  onPress
 }: PatientCardProps) {
   return (
-    <TouchableOpacity style={styles.cardContainer}>
+    <TouchableOpacity style={styles.cardContainer} onPress={onPress}>
       <View style={styles.avatarContainer}>
         <User size={30} color="#4A90E2" />
       </View>
