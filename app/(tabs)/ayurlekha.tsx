@@ -1,35 +1,39 @@
 import React, { useState, useRef, useEffect } from 'react'; // Add useEffect
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Alert, SafeAreaView, Animated } from 'react-native'; // Import Animated
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Alert, SafeAreaView, Animated, Modal, FlatList } from 'react-native'; // Import Animated
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { faShareNodes, faDownload, faQrcode, faSync, faShare } from '@fortawesome/free-solid-svg-icons';
+import { faShareNodes, faDownload, faQrcode, faSync, faShare, faUser } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '@/contexts/AuthContext';
-import { usePatientStore } from '@/stores/patientStore';
+import { usePatientStore, getSelectedPatient } from '@/stores/patientStore';
 import { supabase } from '@/lib/supabase';
 import { Picker } from '@react-native-picker/picker';
 
 const MedicalSummaryScreen = () => {
   const { user } = useAuth();
-  const { patients } = usePatientStore();
-  const [selectedPatient, setSelectedPatient] = useState<string>(patients[0]?.id || '');
+  const patients = usePatientStore((state) => state.patients);
+  const selectedPatientId = usePatientStore((state) => state.selectedPatientId);
+  const setSelectedPatientId = usePatientStore((state) => state.setSelectedPatientId);
+  const selectedPatient = getSelectedPatient({ patients, selectedPatientId } as any);
   const [ayurlekhaData, setAyurlekhaData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('History');
   const [isFabOpen, setIsFabOpen] = useState(false);
+  const [showPatientModal, setShowPatientModal] = useState(false);
   const animation = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (!user?.id || !selectedPatientId) {
+      setAyurlekhaData(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     const fetchLatestJson = async () => {
-      if (!user?.id || !selectedPatient) {
-        setAyurlekhaData(null);
-        setError('No patient selected.');
-        return;
-      }
       setLoading(true);
       setError(null);
       setAyurlekhaData(null);
       try {
-        const folderPath = `Ayurlekha/${user.id}/${selectedPatient}`;
+        const folderPath = `Ayurlekha/${user.id}/${selectedPatientId}`;
         const { data, error: listError } = await supabase.storage
           .from('medical-documents')
           .list(folderPath, { limit: 100, offset: 0 });
@@ -39,8 +43,7 @@ const MedicalSummaryScreen = () => {
           setLoading(false);
           return;
         }
-        // Filter for JSON files by naming convention
-        const ayurlekhaFiles = data.filter(f => f.name.startsWith(`${selectedPatient}_Ayurlekha_`) && f.name.endsWith('.json'));
+        const ayurlekhaFiles = data.filter(f => f.name.startsWith(`${selectedPatientId}_Ayurlekha_`) && f.name.endsWith('.json'));
         if (ayurlekhaFiles.length === 0) {
           setError('No Ayurlekha summary found for this patient.');
           setLoading(false);
@@ -64,7 +67,7 @@ const MedicalSummaryScreen = () => {
       }
     };
     fetchLatestJson();
-  }, [user?.id, selectedPatient]);
+  }, [user?.id, selectedPatientId]);
 
   // Tabs data from JSON
   const tabs = ayurlekhaData ? [
@@ -143,24 +146,56 @@ const MedicalSummaryScreen = () => {
     }
   };
 
+  // Patient selection modal
+  const renderPatientModal = () => (
+    <Modal visible={showPatientModal} animationType="slide" transparent onRequestClose={() => setShowPatientModal(false)}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center' }}>
+        <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 24, width: '80%' }}>
+          <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 16 }}>Select Patient</Text>
+          <FlatList
+            data={patients}
+            keyExtractor={item => item.id}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: '#eee', flexDirection: 'row', alignItems: 'center' }}
+                onPress={() => { setSelectedPatientId(item.id); setShowPatientModal(false); }}
+              >
+                <FontAwesomeIcon icon={faUser} size={18} color="#4A90E2" style={{ marginRight: 10 }} />
+                <Text style={{ fontSize: 16 }}>{item.name} {item.id === selectedPatientId && <Text style={{ color: '#4A90E2' }}> (Selected)</Text>}</Text>
+              </TouchableOpacity>
+            )}
+            ListEmptyComponent={<Text>No patients found.</Text>}
+          />
+          <TouchableOpacity onPress={() => setShowPatientModal(false)} style={{ marginTop: 16, alignSelf: 'flex-end' }}>
+            <Text style={{ color: '#4A90E2', fontWeight: 'bold' }}>Close</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.mainContainer}>
-        {/* Patient Picker */}
-        <View style={{ padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' }}>
-          <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 8 }}>Select Patient:</Text>
-          <Picker
-            selectedValue={selectedPatient}
-            onValueChange={setSelectedPatient}
-            style={{ backgroundColor: '#f8f8f8', borderRadius: 8 }}
-          >
-            {patients.map((p) => (
-              <Picker.Item key={p.id} label={p.name} value={p.id} />
-            ))}
-          </Picker>
+        {/* Patient Selector Button */}
+        <View style={{ padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <FontAwesomeIcon icon={faUser} size={18} color="#4A90E2" style={{ marginRight: 8 }} />
+            <Text style={{ fontWeight: 'bold', fontSize: 16 }}>
+              {selectedPatient ? selectedPatient.name : 'Select Patient'}
+            </Text>
+          </View>
+          <TouchableOpacity onPress={() => setShowPatientModal(true)} style={{ backgroundColor: '#f0f0f0', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 14 }}>
+            <Text style={{ color: '#4A90E2', fontWeight: 'bold' }}>{selectedPatient ? 'Change' : 'Select'}</Text>
+          </TouchableOpacity>
         </View>
-        {/* Loading/Error State */}
-        {loading ? (
+        {renderPatientModal()}
+        {/* If no patient selected, prompt user */}
+        {!selectedPatientId ? (
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 }}>
+            <Text style={{ fontSize: 16, color: '#888' }}>Please select a patient to view Ayurlekha summary.</Text>
+          </View>
+        ) : loading ? (
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 }}>
             <Text style={{ fontSize: 16, color: '#888' }}>Loading summary...</Text>
           </View>
@@ -172,38 +207,30 @@ const MedicalSummaryScreen = () => {
           <ScrollView style={styles.scrollViewContent}>
             <View style={styles.prescriptionSlip}>
               {/* Header Section */}
-              <View style={styles.header}>
-                <View style={styles.headerTop}>
-                  <View style={styles.headerTitleContainer}>
-                    <Text style={styles.headerTitle}>Patient Medical Record</Text>
-                    <Text style={styles.lastUpdatedText}>Last Updated: {ayurlekhaData.footer?.date || 'N/A'}</Text>
-                  </View>
+              <View style={[styles.header, { borderRadius: 8, borderWidth: 2, borderColor: '#555', marginHorizontal: 0 }]}> {/* Ensure border is visible */}
+                {/* Centrally aligned fixed area for 'Ayurlekha' */}
+                <View style={{ alignItems: 'center', marginBottom: 8 }}>
+                  <Text style={{ fontWeight: 'bold', fontSize: 20, letterSpacing: 1 }}>Ayurlekha</Text>
                 </View>
-                {/* Patient Demographics & Snapshot in Header */}
-                <View style={styles.patientSnapshotContainer}>
-                  <View style={styles.patientInfoColumn}>
-                    <Text style={styles.patientInfoText}><Text style={styles.boldText}>Patient:</Text> {ayurlekhaData.patient?.name || 'N/A'}</Text>
-                    <Text style={styles.patientInfoText}><Text style={styles.boldText}>DOB:</Text> {ayurlekhaData.patient?.dob || 'N/A'} (Age: {ayurlekhaData.patient?.age || 'N/A'})</Text>
-                    <Text style={styles.patientInfoText}><Text style={styles.boldText}>Blood Group:</Text> {ayurlekhaData.patient?.bloodGroup || 'N/A'}</Text>
-                  </View>
-                  <View style={styles.vitalsColumn}>
-                    <Text style={styles.snapshotLabel}>Primary Condition Status:</Text>
-                    <Text style={styles.amlStatusText}>{ayurlekhaData.primaryAlert?.alert || 'N/A'}</Text>
-                    <Text style={styles.snapshotLabel}>Next Action/Test:</Text>
-                    <Text style={styles.nextTestText}>{ayurlekhaData.labTests?.find((l: any) => l.result?.toLowerCase().includes('planned'))?.investigation || 'None'}</Text>
-                    <Text style={styles.alertText}>
-                      ⚠️ ALERT: {ayurlekhaData.primaryAlert?.specialCare || 'N/A'}
+                {/* Patient name, age, blood group in a single line */}
+                {ayurlekhaData.patient && (
+                  <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 8 }}>
+                    <Text style={{ fontWeight: 'bold', fontSize: 16 }}>
+                      {ayurlekhaData.patient.name}
+                      {ayurlekhaData.patient.age ? ` | ${ayurlekhaData.patient.age} yrs` : ''}
+                      {ayurlekhaData.patient.bloodGroup ? ` | ${ayurlekhaData.patient.bloodGroup}` : ''}
                     </Text>
                   </View>
-                </View>
+                )}
+                {/* Only show summary in header, no redundant patient info */}
+                {ayurlekhaData.summary && (
+                  <View style={{ paddingVertical: 8 }}>
+                    <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 4 }}>Summary</Text>
+                    <Text style={{ fontSize: 14 }}>{ayurlekhaData.summary}</Text>
+                  </View>
+                )}
+                <Text style={styles.lastUpdatedText}>Last Updated: {ayurlekhaData.footer?.date || 'N/A'}</Text>
               </View>
-              {/* Summary Section */}
-              {ayurlekhaData.summary && (
-                <View style={{ padding: 16, backgroundColor: '#f9f9f9', borderRadius: 8, margin: 16 }}>
-                  <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 4 }}>Summary</Text>
-                  <Text style={{ fontSize: 14 }}>{ayurlekhaData.summary}</Text>
-                </View>
-              )}
               {/* Tab Navigation */}
               <View style={styles.tabContainer}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -290,8 +317,9 @@ const styles = StyleSheet.create({
   },
   scrollViewContent: {
     flex: 1,
-    padding: 10, // Padding around the slip
-    paddingBottom: 100, // Increased padding to make space for the FAB
+    paddingHorizontal: 10, // Consistent horizontal spacing
+    paddingBottom: 100, // Space for FAB
+    paddingTop: 10,
   },
   prescriptionSlip: {
     backgroundColor: '#fff',
@@ -305,7 +333,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
     marginVertical: 10,
-    alignSelf: 'center',
+    width: '100%', // Ensure full width for border
     maxWidth: 600,
   },
   header: {
