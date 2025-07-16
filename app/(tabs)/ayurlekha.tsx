@@ -34,6 +34,7 @@ const MedicalSummaryScreen = () => {
       setAyurlekhaData(null);
       try {
         const folderPath = `Ayurlekha/${user.id}/${selectedPatientId}`;
+        console.log('Ayurlekha folderPath:', folderPath); // Log folder path
         const { data, error: listError } = await supabase.storage
           .from('medical-documents')
           .list(folderPath, { limit: 100, offset: 0 });
@@ -44,6 +45,7 @@ const MedicalSummaryScreen = () => {
           return;
         }
         const ayurlekhaFiles = data.filter(f => f.name.startsWith(`${selectedPatientId}_Ayurlekha_`) && f.name.endsWith('.json'));
+        console.log('Ayurlekha files found:', ayurlekhaFiles.map(f => f.name)); // Log file names
         if (ayurlekhaFiles.length === 0) {
           setError('No Ayurlekha summary found for this patient.');
           setLoading(false);
@@ -51,7 +53,9 @@ const MedicalSummaryScreen = () => {
         }
         ayurlekhaFiles.sort((a, b) => b.name.localeCompare(a.name));
         const latestFile = ayurlekhaFiles[0];
+        console.log('Latest Ayurlekha file:', latestFile.name); // Log latest file name
         const filePath = `${folderPath}/${latestFile.name}`;
+        console.log('Ayurlekha filePath:', filePath); // Log file path
         const { data: signedUrlData, error: urlError } = await supabase.storage
           .from('medical-documents')
           .createSignedUrl(filePath, 60 * 5);
@@ -59,8 +63,10 @@ const MedicalSummaryScreen = () => {
         const resp = await fetch(signedUrlData.signedUrl);
         if (!resp.ok) throw new Error('Failed to fetch JSON file');
         const json = await resp.json();
+        console.log('Fetched Ayurlekha JSON:', json); // Log the fetched data
         setAyurlekhaData(json);
       } catch (err: any) {
+        console.error('Error loading Ayurlekha summary:', err);
         setError(err?.message || 'Failed to load summary.');
       } finally {
         setLoading(false);
@@ -74,7 +80,7 @@ const MedicalSummaryScreen = () => {
     { id: 'History', label: '📅 History', content: ayurlekhaData.historyTimeline },
     { id: 'Conditions', label: '🩺 Conditions', content: ayurlekhaData.chronicConditions },
     { id: 'Medications', label: '💊 Medications', content: ayurlekhaData.medications },
-    { id: 'LabTests', label: '🧪 Lab Tests', content: ayurlekhaData.labTests },
+    ...(ayurlekhaData.labTests ? [{ id: 'LabTests', label: '🧪 Lab Tests', content: ayurlekhaData.labTests }] : []),
   ] : [];
 
   // FAB animation logic
@@ -111,9 +117,8 @@ const MedicalSummaryScreen = () => {
           <View>
             {ayurlekhaData.chronicConditions.map((cond: any, idx: number) => (
               <View key={idx} style={{ marginBottom: 8 }}>
-                <Text style={{ fontWeight: 'bold' }}>{cond.name}</Text>
-                <Text>Status: {cond.status} | Since: {cond.since}</Text>
-                <Text>Notes: {cond.notes}</Text>
+                <Text style={{ fontWeight: 'bold' }}>{cond.condition}</Text>
+                <Text>Diagnosis Date: {cond.diagnosisDate || 'N/A'}</Text>
               </View>
             ))}
           </View>
@@ -124,8 +129,7 @@ const MedicalSummaryScreen = () => {
             {ayurlekhaData.medications.map((med: any, idx: number) => (
               <View key={idx} style={{ marginBottom: 8 }}>
                 <Text style={{ fontWeight: 'bold' }}>{med.name}</Text>
-                <Text>Dosage: {med.dosage} | Frequency: {med.frequency}</Text>
-                <Text>Indication: {med.indication}</Text>
+                <Text>Dosage: {med.dosage || 'N/A'}</Text>
               </View>
             ))}
           </View>
@@ -135,8 +139,8 @@ const MedicalSummaryScreen = () => {
           <View>
             {ayurlekhaData.labTests.map((lab: any, idx: number) => (
               <View key={idx} style={{ marginBottom: 8 }}>
-                <Text style={{ fontWeight: 'bold' }}>{lab.date} - {lab.investigation}</Text>
-                <Text>Result: {lab.result}</Text>
+                <Text style={{ fontWeight: 'bold' }}>{lab.test}</Text>
+                <Text>Frequency: {lab.frequency || 'N/A'}</Text>
               </View>
             ))}
           </View>
@@ -161,7 +165,10 @@ const MedicalSummaryScreen = () => {
                 onPress={() => { setSelectedPatientId(item.id); setShowPatientModal(false); }}
               >
                 <FontAwesomeIcon icon={faUser} size={18} color="#4A90E2" style={{ marginRight: 10 }} />
-                <Text style={{ fontSize: 16 }}>{item.name} {item.id === selectedPatientId && <Text style={{ color: '#4A90E2' }}> (Selected)</Text>}</Text>
+                <Text style={{ fontSize: 16 }}>
+                  {item.name}
+                  {item.id === selectedPatientId ? <Text style={{ color: '#4A90E2' }}> (Selected)</Text> : null}
+                </Text>
               </TouchableOpacity>
             )}
             ListEmptyComponent={<Text>No patients found.</Text>}
