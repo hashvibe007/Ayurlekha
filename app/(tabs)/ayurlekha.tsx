@@ -5,7 +5,6 @@ import { faShareNodes, faDownload, faQrcode, faSync, faShare, faUser } from '@fo
 import { useAuth } from '@/contexts/AuthContext';
 import { usePatientStore, getSelectedPatient } from '@/stores/patientStore';
 import { supabase } from '@/lib/supabase';
-import { Picker } from '@react-native-picker/picker';
 
 const MedicalSummaryScreen = () => {
   const { user } = useAuth();
@@ -223,9 +222,11 @@ const MedicalSummaryScreen = () => {
                 {ayurlekhaData.patient && (
                   <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 8 }}>
                     <Text style={{ fontWeight: 'bold', fontSize: 16 }}>
-                      {ayurlekhaData.patient.name}
-                      {ayurlekhaData.patient.age ? ` | ${ayurlekhaData.patient.age} yrs` : ''}
-                      {ayurlekhaData.patient.bloodGroup ? ` | ${ayurlekhaData.patient.bloodGroup}` : ''}
+                      {[
+                        ayurlekhaData.patient.name,
+                        ayurlekhaData.patient.age ? ` | ${ayurlekhaData.patient.age} yrs` : '',
+                        ayurlekhaData.patient.bloodGroup ? ` | ${ayurlekhaData.patient.bloodGroup}` : ''
+                      ].join('')}
                     </Text>
                   </View>
                 )}

@@ -1,3 +1,7 @@
+// Polyfill for structuredClone if not available
+if (typeof global.structuredClone !== 'function') {
+  global.structuredClone = (obj: any) => JSON.parse(JSON.stringify(obj));
+}
 import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';

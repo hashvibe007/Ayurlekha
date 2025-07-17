@@ -20,7 +20,7 @@ import { RecordCard } from '@/components/RecordCard';
 import { CategoryTabs } from '@/components/CategoryTabs';
 import { useRecordStore } from '@/stores/recordStore';
 import { usePatientStore } from '@/stores/patientStore';
-import { Picker } from '@react-native-picker/picker';
+import DropDownPicker from 'react-native-dropdown-picker';
 import { WebView } from 'react-native-webview';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faShareNodes, faTimes } from '@fortawesome/free-solid-svg-icons';
@@ -49,7 +49,12 @@ export default function RecordsScreen() {
   
   const { records, isLoading, fetchRecords } = useRecordStore();
   const { patients } = usePatientStore();
-  const [selectedPatient, setSelectedPatient] = useState<string>('all');
+  const [selectedPatient, setSelectedPatient] = useState('all');
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState([
+    { label: 'All', value: 'all' },
+    ...patients.map((p) => ({ label: p.name, value: p.id }))
+  ]);
 
   useEffect(() => {
     fetchRecords(selectedPatient !== 'all' ? selectedPatient : undefined);
@@ -163,16 +168,19 @@ export default function RecordsScreen() {
 
         <View style={styles.filterRow}>
           <Text style={styles.filterLabel}>Patient:</Text>
-          <Picker
-            selectedValue={selectedPatient}
-            onValueChange={setSelectedPatient}
+          <DropDownPicker
+            open={open}
+            value={selectedPatient}
+            items={items}
+            setOpen={setOpen}
+            setValue={setSelectedPatient}
+            setItems={setItems}
+            containerStyle={{ flex: 1, marginLeft: 10 }}
             style={styles.picker}
-          >
-            <Picker.Item label="All" value="all" />
-            {patients.map((p) => (
-              <Picker.Item key={p.id} label={p.name} value={p.id} />
-            ))}
-          </Picker>
+            dropDownContainerStyle={{ backgroundColor: '#fff', zIndex: 1000 }}
+            placeholder="Select Patient"
+            listMode="SCROLLVIEW"
+          />
         </View>
       </View>
 
