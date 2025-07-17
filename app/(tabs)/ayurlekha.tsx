@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'; // Add useEffect
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Alert, SafeAreaView, Animated, Modal, FlatList } from 'react-native'; // Import Animated
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Alert, Animated, Modal, FlatList } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
 import { faShareNodes, faDownload, faQrcode, faSync, faShare, faUser } from '@fortawesome/free-solid-svg-icons';
 import { useAuth } from '@/contexts/AuthContext';
@@ -19,6 +20,7 @@ const MedicalSummaryScreen = () => {
   const [isFabOpen, setIsFabOpen] = useState(false);
   const [showPatientModal, setShowPatientModal] = useState(false);
   const animation = useRef(new Animated.Value(0)).current;
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     if (!user?.id || !selectedPatientId) {
@@ -182,7 +184,7 @@ const MedicalSummaryScreen = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.mainContainer}>
+      <View style={[styles.mainContainer, { paddingBottom: insets.bottom + 16 }]}> {/* Add bottom padding */}
         {/* Patient Selector Button */}
         <View style={{ padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -191,7 +193,7 @@ const MedicalSummaryScreen = () => {
               {selectedPatient ? selectedPatient.name : 'Select Patient'}
             </Text>
           </View>
-          <TouchableOpacity onPress={() => setShowPatientModal(true)} style={{ backgroundColor: '#f0f0f0', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 14 }}>
+          <TouchableOpacity onPress={() => setShowPatientModal(true)} style={{ backgroundColor: '#f0f0f0', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 14, marginBottom: insets.bottom }}>
             <Text style={{ color: '#4A90E2', fontWeight: 'bold' }}>{selectedPatient ? 'Change' : 'Select'}</Text>
           </TouchableOpacity>
         </View>
