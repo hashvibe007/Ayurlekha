@@ -2,13 +2,13 @@ import React from 'react';
 import { View, Text, StyleSheet, ImageBackground } from 'react-native';
 
 const typeBackgrounds: Record<string, any> = {
-  laboratory: require('@/assets/images/lab-bg.png'),
-  radiology: require('@/assets/images/radiology-bg.png'),
-  prescription: require('@/assets/images/prescription-bg.png'),
-  scan: require('@/assets/images/scan-bg.png'),
-  document: require('@/assets/images/document-bg.png'),
-  general: require('@/assets/images/general-bg.png'),
-  default: require('@/assets/images/default-bg.png'),
+  laboratory: require('@/assets/images/lab-bg.jpg'),
+  radiology: require('@/assets/images/radiology-bg.jpg'),
+  prescription: require('@/assets/images/prescription-bg.jpg'),
+  scan: require('@/assets/images/scan-bg.jpg'),
+  document: require('@/assets/images/document-bg.jpg'),
+  general: require('@/assets/images/general-bg.jpg'),
+  default: require('@/assets/images/default-bg.jpg'),
 };
 
 export const RecentCard = ({ title, date, category, patientName, imageUrl }) => {
