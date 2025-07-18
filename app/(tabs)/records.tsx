@@ -23,7 +23,7 @@ import { usePatientStore } from '@/stores/patientStore';
 import DropDownPicker from 'react-native-dropdown-picker';
 import { WebView } from 'react-native-webview';
 import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { faShareNodes, faTimes } from '@fortawesome/free-solid-svg-icons';
+import { faShareNodes, faTimes, faUser, faChevronDown } from '@fortawesome/free-solid-svg-icons';
 import { supabase } from '@/lib/supabase';
 
 const { width, height } = Dimensions.get('window');
@@ -50,11 +50,7 @@ export default function RecordsScreen() {
   const { records, isLoading, fetchRecords } = useRecordStore();
   const { patients } = usePatientStore();
   const [selectedPatient, setSelectedPatient] = useState('all');
-  const [open, setOpen] = useState(false);
-  const [items, setItems] = useState([
-    { label: 'All', value: 'all' },
-    ...patients.map((p) => ({ label: p.name, value: p.id }))
-  ]);
+  const [showPatientModal, setShowPatientModal] = useState(false);
 
   useEffect(() => {
     fetchRecords(selectedPatient !== 'all' ? selectedPatient : undefined);
@@ -226,19 +222,15 @@ export default function RecordsScreen() {
 
         <View style={styles.filterRow}>
           <Text style={styles.filterLabel}>Patient:</Text>
-          <DropDownPicker
-            open={open}
-            value={selectedPatient}
-            items={items}
-            setOpen={setOpen}
-            setValue={setSelectedPatient}
-            setItems={setItems}
-            containerStyle={{ flex: 1, marginLeft: 10 }}
-            style={styles.picker}
-            dropDownContainerStyle={{ backgroundColor: '#fff', zIndex: 1000 }}
-            placeholder="Select Patient"
-            listMode="SCROLLVIEW"
-          />
+          <TouchableOpacity
+            style={styles.patientPicker}
+            onPress={() => setShowPatientModal(true)}
+          >
+            <Text style={styles.patientPickerText} numberOfLines={1}>
+              {selectedPatient === 'all' ? 'All' : (patients.find(p => p.id === selectedPatient)?.name || 'Unknown')}
+            </Text>
+            <FontAwesomeIcon icon={faChevronDown} size={14} color="#4A90E2" style={{ marginLeft: 8 }} />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -291,6 +283,34 @@ export default function RecordsScreen() {
             </View>
           </View>
         </SafeAreaView>
+      </Modal>
+      {/* Patient selection modal */}
+      <Modal visible={showPatientModal} animationType="slide" transparent onRequestClose={() => setShowPatientModal(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 24, width: '80%' }}>
+            <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 16 }}>Select Patient</Text>
+            <FlatList
+              data={[{ id: 'all', name: 'All' }, ...patients]}
+              keyExtractor={item => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: '#eee', flexDirection: 'row', alignItems: 'center' }}
+                  onPress={() => { setSelectedPatient(item.id); setShowPatientModal(false); }}
+                >
+                  <FontAwesomeIcon icon={faUser} size={18} color="#4A90E2" style={{ marginRight: 10 }} />
+                  <Text style={{ fontSize: 16 }}>
+                    {item.name}
+                    {item.id === selectedPatient ? <Text style={{ color: '#4A90E2' }}> (Selected)</Text> : null}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={<Text>No patients found.</Text>}
+            />
+            <TouchableOpacity onPress={() => setShowPatientModal(false)} style={{ marginTop: 16, alignSelf: 'flex-end' }}>
+              <Text style={{ color: '#4A90E2', fontWeight: 'bold' }}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -434,5 +454,23 @@ const styles = StyleSheet.create({
     padding: 6,
     borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.6)',
+  },
+  patientPicker: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f7f9fc',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginLeft: 10,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  patientPickerText: {
+    flex: 1,
+    fontFamily: 'Inter-Regular',
+    fontSize: 16,
+    color: '#333',
   },
 });
