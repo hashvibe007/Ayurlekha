@@ -12,7 +12,8 @@ import {
   Modal,
   Image,
   Share,
-  Alert
+  Alert,
+  ActivityIndicator
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -51,14 +52,69 @@ export default function RecordsScreen() {
   const { patients } = usePatientStore();
   const [selectedPatient, setSelectedPatient] = useState('all');
   const [showPatientModal, setShowPatientModal] = useState(false);
+  const [recordsWithMetadata, setRecordsWithMetadata] = useState<any[]>([]);
+  const [loadingMeta, setLoadingMeta] = useState(false);
 
   useEffect(() => {
-    fetchRecords(selectedPatient !== 'all' ? selectedPatient : undefined);
+    const fetchAll = async () => {
+      setLoadingMeta(true);
+      await fetchRecords(selectedPatient !== 'all' ? selectedPatient : undefined);
+    };
+    fetchAll();
   }, [selectedPatient]);
 
   useEffect(() => {
+    // Only run when records change (after fetchRecords)
+    const fetchMetadataForRecords = async () => {
+      setLoadingMeta(true);
+      const updated = await Promise.all(records.map(async (rec) => {
+        try {
+          // Parse storage path from file_url
+          // Example: https://.../medical-documents/<user>/<patient>/<filename>
+          const urlPrefix = '/storage/v1/object/public/medical-documents/';
+          const idx = rec.file_url.indexOf(urlPrefix);
+          let storagePath = '';
+          if (idx !== -1) {
+            storagePath = rec.file_url.substring(idx + urlPrefix.length);
+          }
+          if (!storagePath) {
+            console.log('Could not parse storage path for', rec.file_url);
+            return { ...rec, _meta: null };
+          }
+          const metaPath = storagePath.replace(/(\.[^.]+)$/, '_metadata.json');
+          const { data, error } = await supabase.storage.from('medical-documents').createSignedUrl(metaPath, 60 * 5);
+          if (error || !data?.signedUrl) {
+            console.log('No metadata for', metaPath);
+            return { ...rec, _meta: null };
+          }
+          const resp = await fetch(data.signedUrl);
+          if (!resp.ok) {
+            console.log('Failed to fetch metadata for', metaPath);
+            return { ...rec, _meta: null };
+          }
+          const meta = await resp.json();
+          console.log('Fetched metadata for', metaPath, meta);
+          return { ...rec, _meta: meta };
+        } catch (e) {
+          console.log('Error fetching metadata for', rec.file_url, e);
+          return { ...rec, _meta: null };
+        }
+      }));
+      console.log('Final records with metadata:', updated);
+      setRecordsWithMetadata(updated);
+      setLoadingMeta(false);
+    };
+    if (records && records.length > 0) {
+      fetchMetadataForRecords();
+    } else {
+      setRecordsWithMetadata([]);
+      setLoadingMeta(false);
+    }
+  }, [records]);
+
+  useEffect(() => {
     // Filter records based on search and category
-    let filtered = records;
+    let filtered = recordsWithMetadata;
 
     // Filter by category
     if (selectedCategory !== 'all') {
@@ -78,7 +134,7 @@ export default function RecordsScreen() {
     }
 
     setFilteredRecords(filtered);
-  }, [records, searchQuery, selectedCategory]);
+  }, [recordsWithMetadata, searchQuery, selectedCategory]);
 
   const handleSearch = (text: string) => {
     setSearchQuery(text);
@@ -151,32 +207,56 @@ export default function RecordsScreen() {
   };
 
   // Card renderer
-  const renderRecordCard = ({ item }: { item: any }) => (
-    <TouchableOpacity
-      style={styles.cardContainer}
-      activeOpacity={0.85}
-      onPress={() => handleRecordPress(item)}
-      onLongPress={() => handleShare(item)}
-    >
-      <Image
-        source={{ uri: item.file_url }}
-        style={styles.cardImage}
-        blurRadius={2}
-      />
-      <View style={styles.cardOverlay}>
-        <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
-        <Text style={styles.cardInfo}>{getOverlayInfo(item)}</Text>
-        <View style={styles.cardActions}>
-          <TouchableOpacity onPress={() => handleShare(item)} style={styles.actionIcon}>
-            <FontAwesomeIcon icon={faShareNodes} size={18} color="#4A90E2" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => handleDelete(item)} style={styles.actionIcon}>
-            <FontAwesomeIcon icon={faTimes} size={18} color="#B0B0B0" />
+  const renderRecordCard = ({ item }: { item: any }) => {
+    const meta = item._meta;
+    if (meta && meta.is_medical_document === false) {
+      // Non-medical document card
+      return (
+        <View style={[styles.cardContainer, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8f8f8' }]}> 
+          <Text style={{ color: '#B71C1C', fontWeight: 'bold', fontSize: 16, marginBottom: 8 }}>Not a medical document</Text>
+          {meta.reason && <Text style={{ color: '#757575', fontSize: 13, marginBottom: 12 }}>{meta.reason}</Text>}
+          <TouchableOpacity onPress={() => handleDelete(item)} style={[styles.actionIcon, { backgroundColor: '#ffeaea', borderRadius: 8 }]}> 
+            <FontAwesomeIcon icon={faTimes} size={20} color="#B71C1C" />
+            <Text style={{ color: '#B71C1C', fontWeight: 'bold', marginLeft: 6 }}>Delete</Text>
           </TouchableOpacity>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+      );
+    }
+    // Medical document card (with metadata-driven overlay)
+    return (
+      <TouchableOpacity
+        style={styles.cardContainer}
+        activeOpacity={0.85}
+        onPress={() => handleRecordPress(item)}
+        onLongPress={() => handleShare(item)}
+      >
+        <Image
+          source={{ uri: item.file_url }}
+          style={styles.cardImage}
+          blurRadius={2}
+        />
+        <View style={styles.cardOverlay}>
+          <Text style={styles.cardTitle} numberOfLines={2}>{meta?.intelligent_name || item.title}</Text>
+          <Text style={styles.cardInfo}>{meta?.category || item.category} • {meta?.date || new Date(item.created_at).toLocaleDateString()}</Text>
+          {meta?.doctor_name && <Text style={styles.cardInfo}>{meta.doctor_name} {meta.department ? `• ${meta.department}` : ''}</Text>}
+          {meta?.insights && meta.insights.length > 0 && (
+            <Text style={styles.cardInsights} numberOfLines={2}>{meta.insights.slice(0,2).join(' • ')}</Text>
+          )}
+          {meta?.urgency && (
+            <Text style={[styles.cardUrgency, { color: meta.urgency === 'High' ? '#D32F2F' : '#388E3C' }]}>{meta.urgency} urgency</Text>
+          )}
+          <View style={styles.cardActions}>
+            <TouchableOpacity onPress={() => handleShare(item)} style={styles.actionIcon}>
+              <FontAwesomeIcon icon={faShareNodes} size={18} color="#4A90E2" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => handleDelete(item)} style={styles.actionIcon}>
+              <FontAwesomeIcon icon={faTimes} size={18} color="#B0B0B0" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
@@ -234,24 +314,30 @@ export default function RecordsScreen() {
         </View>
       </View>
 
-      <FlatList
-        data={filteredRecords}
-        renderItem={renderRecordCard}
-        keyExtractor={item => item.id}
-        contentContainerStyle={styles.recordsList}
-        ListEmptyComponent={renderEmptyState}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={['#4A90E2']}
-            tintColor="#4A90E2"
-          />
-        }
-        numColumns={2}
-        columnWrapperStyle={{ justifyContent: 'space-between' }}
-      />
+      {loadingMeta ? (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#4A90E2" />
+        </View>
+      ) : (
+        <FlatList
+          data={recordsWithMetadata}
+          renderItem={renderRecordCard}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.recordsList}
+          ListEmptyComponent={renderEmptyState}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={['#4A90E2']}
+              tintColor="#4A90E2"
+            />
+          }
+          numColumns={2}
+          columnWrapperStyle={{ justifyContent: 'space-between' }}
+        />
+      )}
       {/* Document Viewer Modal */}
       <Modal visible={viewerVisible} animationType="slide" onRequestClose={() => setViewerVisible(false)}>
         <SafeAreaView style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
@@ -472,5 +558,16 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter-Regular',
     fontSize: 16,
     color: '#333',
+  },
+  cardInsights: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 12,
+    color: '#1976D2',
+    marginBottom: 4,
+  },
+  cardUrgency: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 12,
+    marginBottom: 4,
   },
 });
