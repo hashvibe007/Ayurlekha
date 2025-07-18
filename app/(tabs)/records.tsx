@@ -11,12 +11,12 @@ import {
   RefreshControl,
   Modal,
   Image,
-  Share
+  Share,
+  Alert
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, Filter, FileText, BriefcaseMedical as FileMedical, FileImage } from 'lucide-react-native';
-import { RecordCard } from '@/components/RecordCard';
 import { CategoryTabs } from '@/components/CategoryTabs';
 import { useRecordStore } from '@/stores/recordStore';
 import { usePatientStore } from '@/stores/patientStore';
@@ -124,6 +124,64 @@ export default function RecordsScreen() {
     }
   };
 
+  // Helper to get overlay info (dummy for now)
+  const getOverlayInfo = (record: any) => {
+    // In real use, extract from backend; for now, use dummy text based on category
+    switch (record.category.toLowerCase()) {
+      case 'prescription':
+        return 'Dr. Smith • 3 meds • 15 days';
+      case 'laboratory':
+        return 'Blood Test • Hb: 12.5 • 15/07/24';
+      case 'radiology':
+        return 'Chest X-Ray • Normal';
+      default:
+        return 'Document • 2 pages • Uploaded: 2 days ago';
+    }
+  };
+
+  // Subtle delete handler (to be implemented)
+  const handleDelete = (record: any) => {
+    // TODO: Implement delete logic (Supabase + DB)
+    Alert.alert('Delete', 'Are you sure you want to delete this document?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => {/* delete logic */} },
+    ]);
+  };
+
+  // Share handler (to be implemented)
+  const handleShare = (record: any) => {
+    // TODO: Implement share logic (download JPG, share)
+    Alert.alert('Share', 'Share logic goes here.');
+  };
+
+  // Card renderer
+  const renderRecordCard = ({ item }: { item: any }) => (
+    <TouchableOpacity
+      style={styles.cardContainer}
+      activeOpacity={0.85}
+      onPress={() => handleRecordPress(item)}
+      onLongPress={() => handleShare(item)}
+    >
+      <Image
+        source={{ uri: item.file_url }}
+        style={styles.cardImage}
+        blurRadius={2}
+      />
+      <View style={styles.cardOverlay}>
+        <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
+        <Text style={styles.cardInfo}>{getOverlayInfo(item)}</Text>
+        <View style={styles.cardActions}>
+          <TouchableOpacity onPress={() => handleShare(item)} style={styles.actionIcon}>
+            <FontAwesomeIcon icon={faShareNodes} size={18} color="#4A90E2" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => handleDelete(item)} style={styles.actionIcon}>
+            <FontAwesomeIcon icon={faTimes} size={18} color="#B0B0B0" />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
       <FileText size={64} color="#CCCCCC" />
@@ -186,18 +244,7 @@ export default function RecordsScreen() {
 
       <FlatList
         data={filteredRecords}
-        renderItem={({ item }) => (
-          <RecordCard 
-            title={item.title}
-            date={new Date(item.created_at).toLocaleDateString()}
-            category={item.category}
-            patientName={patients.find(p => p.id === item.patient_id)?.name || 'Unknown'}
-            tags={item.tags}
-            imageUrl={item.file_url}
-            icon={getIconForFileType(item.file_type)}
-            onPress={() => handleRecordPress(item)}
-          />
-        )}
+        renderItem={renderRecordCard}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.recordsList}
         ListEmptyComponent={renderEmptyState}
@@ -210,6 +257,8 @@ export default function RecordsScreen() {
             tintColor="#4A90E2"
           />
         }
+        numColumns={2}
+        columnWrapperStyle={{ justifyContent: 'space-between' }}
       />
       {/* Document Viewer Modal */}
       <Modal visible={viewerVisible} animationType="slide" onRequestClose={() => setViewerVisible(false)}>
@@ -340,5 +389,50 @@ const styles = StyleSheet.create({
     color: '#757575',
     textAlign: 'center',
     maxWidth: '80%',
+  },
+  cardContainer: {
+    flex: 1,
+    margin: 8,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: '#fff',
+    elevation: 2,
+    minHeight: 180,
+    maxWidth: (width - 56) / 2, // 20px padding + 8px margin each side
+  },
+  cardImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+    opacity: 0.4,
+  },
+  cardOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    padding: 16,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+  },
+  cardTitle: {
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 16,
+    color: '#222',
+    marginBottom: 4,
+  },
+  cardInfo: {
+    fontFamily: 'Inter-Regular',
+    fontSize: 13,
+    color: '#555',
+    marginBottom: 8,
+  },
+  cardActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+  actionIcon: {
+    marginLeft: 12,
+    padding: 6,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.6)',
   },
 });
