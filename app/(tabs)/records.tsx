@@ -3,31 +3,29 @@ import {
   View,
   Text,
   StyleSheet,
-  TextInput,
-  FlatList,
   ScrollView,
+  TextInput,
   TouchableOpacity,
+  FlatList,
   Dimensions,
-  RefreshControl,
   Modal,
+  SafeAreaView,
   Image,
-  Share,
+  RefreshControl,
+  ActivityIndicator,
   Alert,
-  ActivityIndicator
+  Share
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Search, Filter, FileText, BriefcaseMedical as FileMedical, FileImage } from 'lucide-react-native';
-import { CategoryTabs } from '@/components/CategoryTabs';
+import { Search, X, ChevronDown, Share2, Eye, Calendar, User, FileText, CircleAlert as AlertCircle, CircleCheck as CheckCircle, Clock, ChevronLeft, Heart, Download } from 'lucide-react-native';
+import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
+import { faShareNodes, faTimes, faUser, faChevronDown, faSearch } from '@fortawesome/free-solid-svg-icons';
 import { useRecordStore } from '@/stores/recordStore';
 import { usePatientStore } from '@/stores/patientStore';
-import DropDownPicker from 'react-native-dropdown-picker';
-import { WebView } from 'react-native-webview';
-import { FontAwesomeIcon } from '@fortawesome/react-native-fontawesome';
-import { faShareNodes, faTimes, faUser, faChevronDown } from '@fortawesome/free-solid-svg-icons';
 import { supabase } from '@/lib/supabase';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
+const cardWidth = (width - 48) / 2; // 2 columns with padding
 
 const categories = [
   { id: 'all', name: 'All' },
@@ -44,9 +42,11 @@ export default function RecordsScreen() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [filteredRecords, setFilteredRecords] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-  const [viewerVisible, setViewerVisible] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
+  const [documentImageUrl, setDocumentImageUrl] = useState<string | null>(null);
+  const [loadingDocument, setLoadingDocument] = useState(false);
+  const [loadingCardId, setLoadingCardId] = useState<string | null>(null);
   
   const { records, isLoading, fetchRecords } = useRecordStore();
   const { patients } = usePatientStore();
@@ -54,6 +54,7 @@ export default function RecordsScreen() {
   const [showPatientModal, setShowPatientModal] = useState(false);
   const [recordsWithMetadata, setRecordsWithMetadata] = useState<any[]>([]);
   const [loadingMeta, setLoadingMeta] = useState(false);
+  const [isSearchExpanded, setIsSearchExpanded] = useState(false);
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -70,7 +71,6 @@ export default function RecordsScreen() {
       const updated = await Promise.all(records.map(async (rec) => {
         try {
           // Parse storage path from file_url
-          // Example: https://.../medical-documents/<user>/<patient>/<filename>
           const urlPrefix = '/storage/v1/object/public/medical-documents/';
           const idx = rec.file_url.indexOf(urlPrefix);
           let storagePath = '';
@@ -151,110 +151,233 @@ export default function RecordsScreen() {
   };
 
   const handleRecordPress = async (record: any) => {
-    // Get signed URL for the file
+    // Prevent multiple clicks
+    if (loadingCardId) return;
+    
+    setLoadingCardId(record.id);
+    setSelectedRecord(record);
+    setLoadingDocument(true);
+    
     try {
+      // Get signed URL for the document image
       const filePath = record.file_path || record.file_url?.replace(/^.*medical-documents\//, '');
       const { data, error } = await supabase.storage.from('medical-documents').createSignedUrl(filePath, 60 * 5);
       if (error || !data?.signedUrl) throw error || new Error('Failed to get signed URL');
-      setPreviewUrl(data.signedUrl);
-      setSelectedRecord(record);
-      setViewerVisible(true);
+      setDocumentImageUrl(data.signedUrl);
     } catch (e) {
-      setPreviewUrl(null);
-      setSelectedRecord(record);
-      setViewerVisible(true);
+      console.error('Error loading document image:', e);
+      setDocumentImageUrl(null);
+    } finally {
+      setLoadingDocument(false);
+      setLoadingCardId(null);
+      setDetailModalVisible(true);
     }
   };
 
-  const getIconForFileType = (fileType: string) => {
-    if (fileType.includes('pdf')) {
-      return <FileMedical size={24} color="#E53935" />;
-    } else if (fileType.includes('image')) {
-      return <FileImage size={24} color="#4CAF50" />;
-    } else {
-      return <FileText size={24} color="#4A90E2" />;
+  const getUrgencyColor = (urgency: string) => {
+    switch (urgency?.toLowerCase()) {
+      case 'high': return '#EF4444';
+      case 'medium': return '#F59E0B';
+      case 'low': return '#10B981';
+      default: return '#6B7280';
     }
   };
 
-  // Helper to get overlay info (dummy for now)
-  const getOverlayInfo = (record: any) => {
-    // In real use, extract from backend; for now, use dummy text based on category
-    switch (record.category.toLowerCase()) {
-      case 'prescription':
-        return 'Dr. Smith • 3 meds • 15 days';
-      case 'laboratory':
-        return 'Blood Test • Hb: 12.5 • 15/07/24';
-      case 'radiology':
-        return 'Chest X-Ray • Normal';
-      default:
-        return 'Document • 2 pages • Uploaded: 2 days ago';
+  const getStatusIcon = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'reviewed': return <CheckCircle size={14} color="#10B981" />;
+      case 'pending': return <Clock size={14} color="#F59E0B" />;
+      case 'flagged': return <AlertCircle size={14} color="#EF4444" />;
+      default: return <FileText size={14} color="#6B7280" />;
     }
   };
 
-  // Subtle delete handler (to be implemented)
-  const handleDelete = (record: any) => {
-    // TODO: Implement delete logic (Supabase + DB)
-    Alert.alert('Delete', 'Are you sure you want to delete this document?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => {/* delete logic */} },
-    ]);
+  const getCategoryColor = (category: string) => {
+    switch (category?.toLowerCase()) {
+      case 'laboratory': return '#8B5CF6';
+      case 'radiology': return '#06B6D4';
+      case 'prescription': return '#10B981';
+      case 'consultation': return '#F59E0B';
+      case 'scan': return '#EC4899';
+      case 'document': return '#6366F1';
+      default: return '#6B7280';
+    }
   };
 
-  // Share handler (to be implemented)
-  const handleShare = (record: any) => {
-    // TODO: Implement share logic (download JPG, share)
-    Alert.alert('Share', 'Share logic goes here.');
-  };
-
-  // Card renderer
-  const renderRecordCard = ({ item }: { item: any }) => {
+  const renderGridItem = ({ item, index }: { item: any; index: number }) => {
     const meta = item._meta;
-    if (meta && meta.is_medical_document === false) {
-      // Non-medical document card
-      return (
-        <View style={[styles.cardContainer, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8f8f8' }]}> 
-          <Text style={{ color: '#B71C1C', fontWeight: 'bold', fontSize: 16, marginBottom: 8 }}>Not a medical document</Text>
-          {meta.reason && <Text style={{ color: '#757575', fontSize: 13, marginBottom: 12 }}>{meta.reason}</Text>}
-          <TouchableOpacity onPress={() => handleDelete(item)} style={[styles.actionIcon, { backgroundColor: '#ffeaea', borderRadius: 8 }]}> 
-            <FontAwesomeIcon icon={faTimes} size={20} color="#B71C1C" />
-            <Text style={{ color: '#B71C1C', fontWeight: 'bold', marginLeft: 6 }}>Delete</Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
-    // Medical document card (with metadata-driven overlay)
+    const title = meta?.intelligent_name || item.title;
+    const category = meta?.category || item.category;
+    const date = meta?.date || new Date(item.created_at).toLocaleDateString();
+    const keyFinding = meta?.insights && meta.insights.length > 0 ? meta.insights[0] : (meta?.urgency || 'Document');
+    const status = meta?.status || 'pending';
+    const urgency = meta?.urgency || 'low';
+    const isLoading = loadingCardId === item.id;
+
     return (
-      <TouchableOpacity
-        style={styles.cardContainer}
-        activeOpacity={0.85}
-        onPress={() => handleRecordPress(item)}
-        onLongPress={() => handleShare(item)}
+      <TouchableOpacity 
+        style={[
+          styles.gridCard, 
+          { marginLeft: index % 2 === 0 ? 0 : 8 },
+          isLoading && styles.gridCardLoading
+        ]}
+        activeOpacity={isLoading ? 1 : 0.95}
+        onPress={() => !isLoading && handleRecordPress(item)}
+        disabled={isLoading}
       >
-        <Image
-          source={{ uri: item.file_url }}
-          style={styles.cardImage}
-          blurRadius={2}
-        />
-        <View style={styles.cardOverlay}>
-          <Text style={styles.cardTitle} numberOfLines={2}>{meta?.intelligent_name || item.title}</Text>
-          <Text style={styles.cardInfo}>{meta?.category || item.category} • {meta?.date || new Date(item.created_at).toLocaleDateString()}</Text>
-          {meta?.doctor_name && <Text style={styles.cardInfo}>{meta.doctor_name} {meta.department ? `• ${meta.department}` : ''}</Text>}
-          {meta?.insights && meta.insights.length > 0 && (
-            <Text style={styles.cardInsights} numberOfLines={2}>{meta.insights.slice(0,2).join(' • ')}</Text>
+        {/* Thumbnail */}
+        <View style={styles.thumbnailContainer}>
+          <Image source={{ uri: item.file_url }} style={styles.thumbnail} />
+          <View style={styles.overlay}>
+            <View style={[styles.categoryDot, { backgroundColor: getCategoryColor(category) }]} />
+            <View style={styles.statusBadge}>
+              {getStatusIcon(status)}
+            </View>
+            <View style={[styles.urgencyIndicator, { backgroundColor: getUrgencyColor(urgency) }]} />
+          </View>
+          
+          {/* Loading Overlay */}
+          {isLoading && (
+            <View style={styles.cardLoadingOverlay}>
+              <ActivityIndicator size="small" color="#FFFFFF" />
+              <Text style={styles.cardLoadingText}>Loading...</Text>
+            </View>
           )}
-          {meta?.urgency && (
-            <Text style={[styles.cardUrgency, { color: meta.urgency === 'High' ? '#D32F2F' : '#388E3C' }]}>{meta.urgency} urgency</Text>
-          )}
-          <View style={styles.cardActions}>
-            <TouchableOpacity onPress={() => handleShare(item)} style={styles.actionIcon}>
-              <FontAwesomeIcon icon={faShareNodes} size={18} color="#4A90E2" />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => handleDelete(item)} style={styles.actionIcon}>
-              <FontAwesomeIcon icon={faTimes} size={18} color="#B0B0B0" />
-            </TouchableOpacity>
+        </View>
+
+        {/* Content */}
+        <View style={styles.gridCardContent}>
+          <Text style={styles.gridCardTitle} numberOfLines={2}>{title}</Text>
+          <Text style={styles.gridCardType}>{category}</Text>
+          <Text style={styles.gridCardDate}>{date}</Text>
+          
+          {/* Key Finding Preview */}
+          <View style={styles.previewChip}>
+            <Text style={styles.previewText} numberOfLines={1}>
+              {keyFinding}
+            </Text>
           </View>
         </View>
       </TouchableOpacity>
+    );
+  };
+
+  const DetailModal = () => {
+    if (!selectedRecord) return null;
+
+    const meta = selectedRecord._meta;
+    const title = meta?.intelligent_name || selectedRecord.title;
+    const category = meta?.category || selectedRecord.category;
+    const date = meta?.date || new Date(selectedRecord.created_at).toLocaleDateString();
+    const doctor = meta?.doctor || 'Dr. Unknown';
+    const specialty = meta?.specialty || category;
+    const summary = meta?.summary || 'No summary available';
+    const insights = meta?.insights || [];
+    const keyFindings = meta?.key_findings || [];
+
+    return (
+      <Modal
+        visible={detailModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setDetailModalVisible(false)}
+      >
+        <SafeAreaView style={styles.modalContainer}>
+          {/* Modal Header */}
+          <View style={styles.modalHeader}>
+            <TouchableOpacity 
+              style={styles.backButton}
+              onPress={() => setDetailModalVisible(false)}
+            >
+              <X size={24} color="#0F172A" />
+            </TouchableOpacity>
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalActionButton}>
+                <Share2 size={20} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+            {/* Hero Image */}
+            <View style={styles.heroImageContainer}>
+              {loadingDocument ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color="#3B82F6" />
+                  <Text style={styles.loadingText}>Loading document...</Text>
+                </View>
+              ) : documentImageUrl ? (
+                <Image source={{ uri: documentImageUrl }} style={styles.heroImage} />
+              ) : (
+                <View style={styles.noImageContainer}>
+                  <FileText size={64} color="#9CA3AF" />
+                  <Text style={styles.noImageText}>Document preview not available</Text>
+                </View>
+              )}
+              <View style={styles.heroOverlay}>
+                <View style={[styles.heroCategory, { backgroundColor: getCategoryColor(category) }]}>
+                  <Text style={styles.heroCategoryText}>{category}</Text>
+                </View>
+              </View>
+            </View>
+            
+            {/* Content */}
+            <View style={styles.modalContentSection}>
+              <Text style={styles.heroTitle}>{title}</Text>
+              <Text style={styles.heroSubtitle}>{category}</Text>
+              
+              <View style={styles.heroMeta}>
+                <Text style={styles.heroDate}>{date}</Text>
+                <Text style={styles.heroDoctor}>By {doctor}</Text>
+                <View style={styles.tagContainer}>
+                  <Text style={styles.tag}>#{category.toLowerCase()}</Text>
+                  <Text style={styles.tag}>#{specialty.toLowerCase()}</Text>
+                  <Text style={styles.tag}>#{selectedRecord.file_type?.toLowerCase().replace(' ', '')}</Text>
+                </View>
+              </View>
+
+              <Text style={styles.summaryText}>{summary}</Text>
+
+              {/* Key Findings */}
+              {keyFindings.length > 0 && (
+                <View style={styles.findingsSection}>
+                  <Text style={styles.sectionTitle}>Key Findings</Text>
+                  <View style={styles.findingsGrid}>
+                    {keyFindings.map((finding: string, index: number) => (
+                      <View key={index} style={styles.findingChip}>
+                        <Text style={styles.findingText}>{finding}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {/* AI Insights */}
+              {insights.length > 0 && (
+                <View style={styles.insightsSection}>
+                  <Text style={styles.sectionTitle}>AI Insights</Text>
+                  {insights.map((insight: string, index: number) => (
+                    <View key={index} style={styles.insightItem}>
+                      <View style={styles.insightBullet} />
+                      <Text style={styles.insightText}>{insight}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {/* Actions */}
+              <View style={styles.actionsSection}>
+                <TouchableOpacity style={styles.primaryAction}>
+                  <Text style={styles.primaryActionText}>Add to Favorites</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.secondaryAction}>
+                  <Text style={styles.secondaryActionText}>Share</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     );
   };
 
@@ -277,55 +400,118 @@ export default function RecordsScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar style="dark" />
       
+      {/* Minimal Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Medical Records</Text>
-        
-        <View style={styles.searchContainer}>
-          <Search size={20} color="#757575" style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search records, categories or tags..."
-            value={searchQuery}
-            onChangeText={handleSearch}
-            placeholderTextColor="#9E9E9E"
-          />
-          <TouchableOpacity style={styles.filterButton}>
-            <Filter size={20} color="#4A90E2" />
-          </TouchableOpacity>
-        </View>
-
-        <CategoryTabs 
-          categories={categories}
-          selectedCategory={selectedCategory}
-          onSelectCategory={handleCategorySelect}
-        />
-
-        <View style={styles.filterRow}>
-          <Text style={styles.filterLabel}>Patient:</Text>
-          <TouchableOpacity
-            style={styles.patientPicker}
+        <View style={styles.headerRow}>
+          <TouchableOpacity 
+            style={styles.patientSelector}
             onPress={() => setShowPatientModal(true)}
           >
-            <Text style={styles.patientPickerText} numberOfLines={1}>
-              {selectedPatient === 'all' ? 'All' : (patients.find(p => p.id === selectedPatient)?.name || 'Unknown')}
+            <FontAwesomeIcon icon={faUser} size={16} color="#3B82F6" />
+            <Text style={styles.patientText}>
+              {selectedPatient === 'all' ? 'All' : (patients.find(p => p.id === selectedPatient)?.name.split(' ')[0] || 'Unknown')}
             </Text>
-            <FontAwesomeIcon icon={faChevronDown} size={14} color="#4A90E2" style={{ marginLeft: 8 }} />
+            <FontAwesomeIcon icon={faChevronDown} size={14} color="#3B82F6" />
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.searchIcon}
+            onPress={() => setIsSearchExpanded(!isSearchExpanded)}
+          >
+            <FontAwesomeIcon icon={faSearch} size={20} color="#6B7280" />
           </TouchableOpacity>
         </View>
+
+        {/* Expandable Search */}
+        {isSearchExpanded && (
+          <View style={styles.expandedSearch}>
+            <View style={styles.searchBar}>
+              <FontAwesomeIcon icon={faSearch} size={16} color="#9CA3AF" />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search records, categories or tag..."
+                value={searchQuery}
+                onChangeText={handleSearch}
+                placeholderTextColor="#9CA3AF"
+                autoFocus
+              />
+              <TouchableOpacity onPress={() => setIsSearchExpanded(false)}>
+                <FontAwesomeIcon icon={faTimes} size={16} color="#9CA3AF" />
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              style={styles.categoriesScroll}
+            >
+              {categories.map((category) => (
+                <TouchableOpacity
+                  key={category.id}
+                  style={[
+                    styles.categoryChip,
+                    selectedCategory === category.id && styles.categoryChipActive
+                  ]}
+                  onPress={() => setSelectedCategory(category.id)}
+                >
+                  <Text style={[
+                    styles.categoryText,
+                    selectedCategory === category.id && styles.categoryTextActive
+                  ]}>
+                    {category.name}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* Patient Dropdown */}
+        {showPatientModal && (
+          <Modal visible={showPatientModal} animationType="slide" transparent onRequestClose={() => setShowPatientModal(false)}>
+            <View style={styles.modalOverlay}>
+              <View style={styles.patientModal}>
+                <Text style={styles.modalTitle}>Select Patient</Text>
+                <FlatList
+                  data={[{ id: 'all', name: 'All' }, ...patients]}
+                  keyExtractor={item => item.id}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity
+                      style={styles.patientItem}
+                      onPress={() => { setSelectedPatient(item.id); setShowPatientModal(false); }}
+                    >
+                      <FontAwesomeIcon icon={faUser} size={18} color="#4A90E2" style={{ marginRight: 10 }} />
+                      <Text style={styles.patientItemText}>
+                        {item.name}
+                        {item.id === selectedPatient ? <Text style={{ color: '#4A90E2' }}> (Selected)</Text> : null}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  ListEmptyComponent={<Text>No patients found.</Text>}
+                />
+                <TouchableOpacity onPress={() => setShowPatientModal(false)} style={styles.closeModalButton}>
+                  <Text style={styles.closeModalText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+        )}
       </View>
 
+      {/* Grid View */}
       {loadingMeta ? (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#4A90E2" />
         </View>
       ) : (
         <FlatList
-          data={recordsWithMetadata}
-          renderItem={renderRecordCard}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.recordsList}
-          ListEmptyComponent={renderEmptyState}
+          data={filteredRecords}
+          renderItem={renderGridItem}
+          numColumns={2}
+          contentContainerStyle={styles.gridContainer}
           showsVerticalScrollIndicator={false}
+          ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
+          ListEmptyComponent={renderEmptyState}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -334,70 +520,11 @@ export default function RecordsScreen() {
               tintColor="#4A90E2"
             />
           }
-          numColumns={2}
-          columnWrapperStyle={{ justifyContent: 'space-between' }}
         />
       )}
-      {/* Document Viewer Modal */}
-      <Modal visible={viewerVisible} animationType="slide" onRequestClose={() => setViewerVisible(false)}>
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
-          <View style={{ width: width * 0.95, height: height * 0.7, backgroundColor: '#111', borderRadius: 16, overflow: 'hidden', justifyContent: 'center', alignItems: 'center' }}>
-            {selectedRecord && previewUrl && selectedRecord.file_type.includes('image') ? (
-              <Image source={{ uri: previewUrl }} style={{ width: '100%', height: '85%', resizeMode: 'contain' }} />
-            ) : selectedRecord && previewUrl && selectedRecord.file_type.includes('pdf') ? (
-              <WebView source={{ uri: previewUrl }} style={{ width: '100%', height: '85%' }} />
-            ) : (
-              <Text style={{ color: '#fff', textAlign: 'center', marginTop: 40 }}>Cannot preview this file type.</Text>
-            )}
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', padding: 16, backgroundColor: '#111' }}>
-              <TouchableOpacity onPress={() => setViewerVisible(false)}>
-                <FontAwesomeIcon icon={faTimes} size={22} color="#fff" />
-              </TouchableOpacity>
-              {selectedRecord && previewUrl && (
-                <TouchableOpacity onPress={async () => {
-                  try {
-                    await Share.share({
-                      message: previewUrl,
-                      url: previewUrl,
-                      title: selectedRecord.title,
-                    });
-                  } catch (e) {}
-                }}>
-                  <FontAwesomeIcon icon={faShareNodes} size={22} color="#4A90E2" style={{ marginLeft: 16 }} />
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        </SafeAreaView>
-      </Modal>
-      {/* Patient selection modal */}
-      <Modal visible={showPatientModal} animationType="slide" transparent onRequestClose={() => setShowPatientModal(false)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center' }}>
-          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 24, width: '80%' }}>
-            <Text style={{ fontWeight: 'bold', fontSize: 18, marginBottom: 16 }}>Select Patient</Text>
-            <FlatList
-              data={[{ id: 'all', name: 'All' }, ...patients]}
-              keyExtractor={item => item.id}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: '#eee', flexDirection: 'row', alignItems: 'center' }}
-                  onPress={() => { setSelectedPatient(item.id); setShowPatientModal(false); }}
-                >
-                  <FontAwesomeIcon icon={faUser} size={18} color="#4A90E2" style={{ marginRight: 10 }} />
-                  <Text style={{ fontSize: 16 }}>
-                    {item.name}
-                    {item.id === selectedPatient ? <Text style={{ color: '#4A90E2' }}> (Selected)</Text> : null}
-                  </Text>
-                </TouchableOpacity>
-              )}
-              ListEmptyComponent={<Text>No patients found.</Text>}
-            />
-            <TouchableOpacity onPress={() => setShowPatientModal(false)} style={{ marginTop: 16, alignSelf: 'flex-end' }}>
-              <Text style={{ color: '#4A90E2', fontWeight: 'bold' }}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+
+      {/* Detail Modal */}
+      <DetailModal />
     </SafeAreaView>
   );
 }
@@ -405,76 +532,217 @@ export default function RecordsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F7F9FC',
+    backgroundColor: '#F8FAFC',
   },
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 10,
+    paddingTop: 50,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    backgroundColor: '#FFFFFF',
   },
-  title: {
-    fontFamily: 'Inter-Bold',
-    fontSize: 28,
-    color: '#333333',
-    marginBottom: 15,
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
   },
-  searchContainer: {
+  patientSelector: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    gap: 8,
+    backgroundColor: '#EFF6FF',
     paddingHorizontal: 12,
-    marginBottom: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 3,
-    height: 50,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+  },
+  patientText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#3B82F6',
   },
   searchIcon: {
-    marginRight: 10,
+    padding: 10,
+    borderRadius: 20,
+    backgroundColor: '#F8FAFC',
+  },
+  expandedSearch: {
+    gap: 12,
+    paddingBottom: 12,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 8,
   },
   searchInput: {
     flex: 1,
-    fontFamily: 'Inter-Regular',
-    fontSize: 16,
-    color: '#333333',
-    height: '100%',
+    fontSize: 14,
+    color: '#0F172A',
   },
-  filterButton: {
-    padding: 5,
+  categoriesScroll: {
+    flexDirection: 'row',
   },
-  filterRow: {
+  categoryChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginRight: 8,
+  },
+  categoryChipActive: {
+    backgroundColor: '#3B82F6',
+    borderColor: '#3B82F6',
+  },
+  categoryText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  categoryTextActive: {
+    color: '#FFFFFF',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  patientModal: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 24,
+    width: '80%',
+  },
+  modalTitle: {
+    fontWeight: 'bold',
+    fontSize: 18,
+    marginBottom: 16,
+  },
+  patientItem: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  patientItemText: {
+    fontSize: 16,
+  },
+  closeModalButton: {
+    alignSelf: 'flex-end',
+    marginTop: 16,
+  },
+  closeModalText: {
+    color: '#4A90E2',
+    fontWeight: 'bold',
+  },
+  gridContainer: {
+    padding: 16,
+  },
+  gridCard: {
+    width: cardWidth,
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    marginBottom: 15,
+    borderRadius: 16,
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
-    shadowRadius: 4,
+    shadowRadius: 8,
     elevation: 3,
-    height: 50,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
   },
-  filterLabel: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 16,
-    color: '#333333',
-    marginRight: 10,
+  gridCardLoading: {
+    opacity: 0.7,
   },
-  picker: {
-    flex: 1,
-    fontFamily: 'Inter-Regular',
-    fontSize: 16,
-    color: '#333333',
+  thumbnailContainer: {
+    height: 140,
+    position: 'relative',
+  },
+  thumbnail: {
+    width: '100%',
     height: '100%',
+    resizeMode: 'cover',
   },
-  recordsList: {
-    paddingHorizontal: 20,
-    paddingBottom: 90,
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+  },
+  categoryDot: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+  },
+  statusBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  urgencyIndicator: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  gridCardContent: {
+    padding: 12,
+  },
+  gridCardTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#0F172A',
+    marginBottom: 4,
+    lineHeight: 18,
+  },
+  gridCardType: {
+    fontSize: 12,
+    color: '#64748B',
+    marginBottom: 4,
+  },
+  gridCardDate: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginBottom: 8,
+  },
+  previewChip: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+  },
+  previewText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#1E40AF',
   },
   emptyState: {
     alignItems: 'center',
@@ -483,91 +751,240 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   emptyTitle: {
-    fontFamily: 'Inter-SemiBold',
     fontSize: 18,
+    fontWeight: '600',
     color: '#333333',
     marginTop: 16,
     marginBottom: 8,
   },
   emptyText: {
-    fontFamily: 'Inter-Regular',
     fontSize: 16,
     color: '#757575',
     textAlign: 'center',
     maxWidth: '80%',
   },
-  cardContainer: {
+  loadingContainer: {
     flex: 1,
-    margin: 8,
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: '#fff',
-    elevation: 2,
-    minHeight: 180,
-    maxWidth: (width - 56) / 2, // 20px padding + 8px margin each side
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  cardImage: {
-    ...StyleSheet.absoluteFillObject,
+  loadingText: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  
+  // Modal Styles
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+  },
+  backButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(248,250,252,0.9)',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  modalActionButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(248,250,252,0.9)',
+  },
+  modalContent: {
+    flex: 1,
+  },
+  heroImageContainer: {
+    height: 300,
+    position: 'relative',
+  },
+  heroImage: {
     width: '100%',
     height: '100%',
-    opacity: 0.4,
+    resizeMode: 'cover',
   },
-  cardOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    padding: 16,
-    backgroundColor: 'rgba(255,255,255,0.7)',
+  heroOverlay: {
+    position: 'absolute',
+    bottom: 20,
+    left: 20,
+    right: 20,
   },
-  cardTitle: {
-    fontFamily: 'Inter-SemiBold',
-    fontSize: 16,
-    color: '#222',
-    marginBottom: 4,
+  heroCategory: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
   },
-  cardInfo: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 13,
-    color: '#555',
+  heroCategoryText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  modalContentSection: {
+    padding: 20,
+  },
+  heroTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#0F172A',
     marginBottom: 8,
   },
-  cardActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-  },
-  actionIcon: {
-    marginLeft: 12,
-    padding: 6,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.6)',
-  },
-  patientPicker: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f7f9fc',
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    marginLeft: 10,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  patientPickerText: {
-    flex: 1,
-    fontFamily: 'Inter-Regular',
+  heroSubtitle: {
     fontSize: 16,
-    color: '#333',
+    color: '#64748B',
+    fontWeight: '500',
+    marginBottom: 12,
   },
-  cardInsights: {
-    fontFamily: 'Inter-Regular',
-    fontSize: 12,
-    color: '#1976D2',
+  heroMeta: {
+    marginBottom: 20,
+  },
+  heroDate: {
+    fontSize: 14,
+    color: '#64748B',
     marginBottom: 4,
   },
-  cardUrgency: {
-    fontFamily: 'Inter-SemiBold',
+  heroDoctor: {
+    fontSize: 14,
+    color: '#64748B',
+    marginBottom: 12,
+  },
+  tagContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  tag: {
     fontSize: 12,
-    marginBottom: 4,
+    color: '#3B82F6',
+    fontWeight: '500',
+  },
+  summaryText: {
+    fontSize: 16,
+    color: '#334155',
+    lineHeight: 24,
+    marginBottom: 24,
+  },
+  findingsSection: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#0F172A',
+    marginBottom: 12,
+  },
+  findingsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  findingChip: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+  },
+  findingText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1E40AF',
+  },
+  insightsSection: {
+    marginBottom: 32,
+  },
+  insightItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  insightBullet: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#3B82F6',
+    marginTop: 8,
+    marginRight: 12,
+  },
+  insightText: {
+    flex: 1,
+    fontSize: 15,
+    color: '#334155',
+    lineHeight: 22,
+  },
+  actionsSection: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingBottom: 40,
+  },
+  primaryAction: {
+    flex: 1,
+    backgroundColor: '#3B82F6',
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  primaryActionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  secondaryAction: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  secondaryActionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  noImageContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+    backgroundColor: '#F9FAFB',
+  },
+  noImageText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginTop: 12,
+  },
+  cardLoadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 16,
+  },
+  cardLoadingText: {
+    color: '#FFFFFF',
+    marginTop: 8,
+    fontSize: 14,
   },
 });

@@ -224,11 +224,17 @@ const MedicalSummaryScreen = () => {
                 {ayurlekhaData.patient && (
                   <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 8 }}>
                     <Text style={{ fontWeight: 'bold', fontSize: 16 }}>
-                      {[
-                        ayurlekhaData.patient.name,
-                        ayurlekhaData.patient.age ? ` | ${ayurlekhaData.patient.age} yrs` : '',
-                        ayurlekhaData.patient.bloodGroup ? ` | ${ayurlekhaData.patient.bloodGroup}` : ''
-                      ].join('')}
+                      {ayurlekhaData.patient.name}
+                      {ayurlekhaData.patient.age && (
+                        <Text style={{ fontWeight: 'bold', fontSize: 16 }}>
+                          {` | ${ayurlekhaData.patient.age} yrs`}
+                        </Text>
+                      )}
+                      {ayurlekhaData.patient.bloodGroup && (
+                        <Text style={{ fontWeight: 'bold', fontSize: 16 }}>
+                          {` | ${ayurlekhaData.patient.bloodGroup}`}
+                        </Text>
+                      )}
                     </Text>
                   </View>
                 )}
