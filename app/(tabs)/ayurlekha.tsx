@@ -36,6 +36,7 @@ const MedicalSummaryScreen = () => {
       try {
         const folderPath = `Ayurlekha/${user.id}/${selectedPatientId}`;
         console.log('Ayurlekha folderPath:', folderPath); // Log folder path
+        console.log('Selected patientId:', selectedPatientId); // Debug log
         const { data, error: listError } = await supabase.storage
           .from('medical-documents')
           .list(folderPath, { limit: 100, offset: 0 });
@@ -45,7 +46,7 @@ const MedicalSummaryScreen = () => {
           setLoading(false);
           return;
         }
-        const ayurlekhaFiles = data.filter(f => f.name.startsWith(`${selectedPatientId}_Ayurlekha_`) && f.name.endsWith('.json'));
+        const ayurlekhaFiles = data.filter(f => f.name.includes('_Ayurlekha_') && f.name.endsWith('.json'));
         console.log('Ayurlekha files found:', ayurlekhaFiles.map(f => f.name)); // Log file names
         if (ayurlekhaFiles.length === 0) {
           setError('No Ayurlekha summary found for this patient.');
