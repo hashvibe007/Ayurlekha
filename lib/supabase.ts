@@ -284,3 +284,13 @@ export const fetchPatientsWithAyurlekha = async () => {
   if (error) throw error;
   return data || [];
 };
+
+export const fetchPatients = async (userId: string) => {
+  const { data, error } = await supabase
+    .from('patients')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data;
+};

@@ -3,6 +3,8 @@ import { router, useSegments } from 'expo-router';
 import { Platform } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import type { User } from '@supabase/supabase-js';
+import { usePatientStore } from '@/stores/patientStore';
+import { useRecordStore } from '@/stores/recordStore';
 
 interface AuthContextType {
   user: User | null;
@@ -73,11 +75,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, segments, isLoading]);
 
+  useEffect(() => {
+    if (user?.id) {
+      usePatientStore.getState().fetchPatients(user.id);
+    }
+  }, [user?.id]);
+
   const signOut = async () => {
     try {
       setIsLoading(true);
       await supabase.auth.signOut();
       setUser(null);
+      // Clear local cache for privacy
+      usePatientStore.getState().clearPatients();
+      useRecordStore.getState().clearRecords();
       router.replace('/(auth)/login');
     } catch (error) {
       console.error('Error signing out:', error);

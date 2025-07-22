@@ -101,54 +101,70 @@ const MedicalSummaryScreen = () => {
 
   // Renderers for each tab
   const renderTabContent = (tabId: string) => {
-    if (!ayurlekhaData) return null;
+    if (!ayurlekhaData) return <></>;
     switch (tabId) {
       case 'History':
-        return ayurlekhaData.historyTimeline && ayurlekhaData.historyTimeline.length > 0 ? (
-          <View>
-            {ayurlekhaData.historyTimeline.map((item: any, idx: number) => (
-              <View key={idx} style={{ marginBottom: 8 }}>
-                <Text style={{ fontWeight: 'bold' }}>{item.date}</Text>
-                <Text>{item.event}</Text>
-              </View>
-            ))}
-          </View>
-        ) : <Text>No history available.</Text>;
+        if (ayurlekhaData.historyTimeline && ayurlekhaData.historyTimeline.length > 0) {
+          return (
+            <View>
+              {ayurlekhaData.historyTimeline.map((item: any, idx: number) => (
+                <View key={idx} style={{ marginBottom: 8 }}>
+                  <Text style={{ fontWeight: 'bold' }}>{item.date}</Text>
+                  <Text>{item.event}</Text>
+                </View>
+              ))}
+            </View>
+          );
+        } else {
+          return <Text>No history available.</Text>;
+        }
       case 'Conditions':
-        return ayurlekhaData.chronicConditions && ayurlekhaData.chronicConditions.length > 0 ? (
-          <View>
-            {ayurlekhaData.chronicConditions.map((cond: any, idx: number) => (
-              <View key={idx} style={{ marginBottom: 8 }}>
-                <Text style={{ fontWeight: 'bold' }}>{cond.condition}</Text>
-                <Text>Diagnosis Date: {cond.diagnosisDate || 'N/A'}</Text>
-              </View>
-            ))}
-          </View>
-        ) : <Text>No conditions available.</Text>;
+        if (ayurlekhaData.chronicConditions && ayurlekhaData.chronicConditions.length > 0) {
+          return (
+            <View>
+              {ayurlekhaData.chronicConditions.map((cond: any, idx: number) => (
+                <View key={idx} style={{ marginBottom: 8 }}>
+                  <Text style={{ fontWeight: 'bold' }}>{cond.condition}</Text>
+                  <Text>Diagnosis Date: {cond.diagnosisDate || 'N/A'}</Text>
+                </View>
+              ))}
+            </View>
+          );
+        } else {
+          return <Text>No conditions available.</Text>;
+        }
       case 'Medications':
-        return ayurlekhaData.medications && ayurlekhaData.medications.length > 0 ? (
-          <View>
-            {ayurlekhaData.medications.map((med: any, idx: number) => (
-              <View key={idx} style={{ marginBottom: 8 }}>
-                <Text style={{ fontWeight: 'bold' }}>{med.name}</Text>
-                <Text>Dosage: {med.dosage || 'N/A'}</Text>
-              </View>
-            ))}
-          </View>
-        ) : <Text>No medications available.</Text>;
+        if (ayurlekhaData.medications && ayurlekhaData.medications.length > 0) {
+          return (
+            <View>
+              {ayurlekhaData.medications.map((med: any, idx: number) => (
+                <View key={idx} style={{ marginBottom: 8 }}>
+                  <Text style={{ fontWeight: 'bold' }}>{med.name}</Text>
+                  <Text>Dosage: {med.dosage || 'N/A'}</Text>
+                </View>
+              ))}
+            </View>
+          );
+        } else {
+          return <Text>No medications available.</Text>;
+        }
       case 'LabTests':
-        return ayurlekhaData.labTests && ayurlekhaData.labTests.length > 0 ? (
-          <View>
-            {ayurlekhaData.labTests.map((lab: any, idx: number) => (
-              <View key={idx} style={{ marginBottom: 8 }}>
-                <Text style={{ fontWeight: 'bold' }}>{lab.test}</Text>
-                <Text>Frequency: {lab.frequency || 'N/A'}</Text>
-              </View>
-            ))}
-          </View>
-        ) : <Text>No lab tests available.</Text>;
+        if (ayurlekhaData.labTests && ayurlekhaData.labTests.length > 0) {
+          return (
+            <View>
+              {ayurlekhaData.labTests.map((lab: any, idx: number) => (
+                <View key={idx} style={{ marginBottom: 8 }}>
+                  <Text style={{ fontWeight: 'bold' }}>{lab.test}</Text>
+                  <Text>Frequency: {lab.frequency || 'N/A'}</Text>
+                </View>
+              ))}
+            </View>
+          );
+        } else {
+          return <Text>No lab tests available.</Text>;
+        }
       default:
-        return null;
+        return <></>;
     }
   };
 
@@ -225,17 +241,10 @@ const MedicalSummaryScreen = () => {
                 {ayurlekhaData.patient && (
                   <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 8 }}>
                     <Text style={{ fontWeight: 'bold', fontSize: 16 }}>
-                      {ayurlekhaData.patient.name}
-                      {ayurlekhaData.patient.age && (
-                        <Text style={{ fontWeight: 'bold', fontSize: 16 }}>
-                          {` | ${ayurlekhaData.patient.age} yrs`}
-                        </Text>
-                      )}
-                      {ayurlekhaData.patient.bloodGroup && (
-                        <Text style={{ fontWeight: 'bold', fontSize: 16 }}>
-                          {` | ${ayurlekhaData.patient.bloodGroup}`}
-                        </Text>
-                      )}
+                      {[ayurlekhaData.patient.name,
+                        ayurlekhaData.patient.age ? ` | ${ayurlekhaData.patient.age} yrs` : '',
+                        ayurlekhaData.patient.bloodGroup ? ` | ${ayurlekhaData.patient.bloodGroup}` : ''
+                      ].join('')}
                     </Text>
                   </View>
                 )}
@@ -244,6 +253,19 @@ const MedicalSummaryScreen = () => {
                   <View style={{ paddingVertical: 8 }}>
                     <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 4 }}>Summary</Text>
                     <Text style={{ fontSize: 14 }}>{ayurlekhaData.summary}</Text>
+                  </View>
+                )}
+                {/* Primary Alert Section */}
+                {ayurlekhaData.primaryAlert?.alerts && (
+                  <View style={{ paddingVertical: 8 }}>
+                    <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 4 }}>Alert</Text>
+                    <Text style={{ fontSize: 14 }}>{ayurlekhaData.primaryAlert.alerts}</Text>
+                  </View>
+                )}
+                {ayurlekhaData.primaryAlert?.care_needed && (
+                  <View style={{ paddingVertical: 8 }}>
+                    <Text style={{ fontWeight: 'bold', fontSize: 16, marginBottom: 4 }}>Care Needed</Text>
+                    <Text style={{ fontSize: 14 }}>{ayurlekhaData.primaryAlert.care_needed}</Text>
                   </View>
                 )}
                 <Text style={styles.lastUpdatedText}>Last Updated: {ayurlekhaData.footer?.date || 'N/A'}</Text>
@@ -266,7 +288,14 @@ const MedicalSummaryScreen = () => {
               </View>
               {/* Tab Content */}
               <View style={styles.tabContent}>
-                {renderTabContent(activeTab)}
+                {/* Fallback: if renderTabContent ever returns a string, wrap it in <Text> */}
+                {(() => {
+                  const content = renderTabContent(activeTab);
+                  if (typeof content === 'string') {
+                    return <Text>{content}</Text>;
+                  }
+                  return content;
+                })()}
               </View>
               {/* Doctors & Emergency Contacts */}
               <View style={{ marginTop: 16 }}>

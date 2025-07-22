@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { fetchPatients as fetchPatientsFromBackend } from '@/lib/supabase';
 
 interface Patient {
   id: string;
@@ -20,6 +21,7 @@ interface PatientState {
   removePatient: (id: string) => void;
   clearPatients: () => void;
   setSelectedPatientId: (id: string) => void;
+  fetchPatients: (userId: string) => Promise<void>;
 }
 
 export const usePatientStore = create<PatientState>()(
@@ -41,6 +43,10 @@ export const usePatientStore = create<PatientState>()(
       })),
       clearPatients: () => set({ patients: [], selectedPatientId: null }),
       setSelectedPatientId: (id) => set({ selectedPatientId: id }),
+      fetchPatients: async (userId: string) => {
+        const patients = await fetchPatientsFromBackend(userId);
+        set({ patients });
+      },
     }),
     {
       name: 'ayurlekha-patients',
